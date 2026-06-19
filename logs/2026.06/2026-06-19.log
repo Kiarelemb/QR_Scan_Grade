@@ -1,0 +1,10 @@
+2026-06-19 18:28:53.021	INFO		[sg.qr.kiarelemb.Enter:main] Enter.java:33																					************************************** 项目开始启动 **************************************
+2026-06-19 18:28:53.068	INFO		[sg.qr.kiarelemb.Enter:main] Enter.java:34																					QRSwing 框架加载完毕，共计耗时: 1.011
+2026-06-19 18:28:53.071	INFO		[sg.qr.kiarelemb.Enter:variousLoad] Enter.java:56																			当前系统：Ubuntu 26.04 LTS
+2026-06-19 18:29:39.979	INFO		[sg.qr.kiarelemb.Enter:main] Enter.java:33																					************************************** 项目开始启动 **************************************
+2026-06-19 18:29:40.033	INFO		[sg.qr.kiarelemb.Enter:main] Enter.java:34																					QRSwing 框架加载完毕，共计耗时: 0.685
+2026-06-19 18:29:40.036	INFO		[sg.qr.kiarelemb.Enter:variousLoad] Enter.java:56																			当前系统：Ubuntu 26.04 LTS
+2026-06-19 18:29:40.053	CONFIG		[sg.qr.kiarelemb.Enter:variousLoad] Enter.java:77																			加载默认字体：阿里巴巴普惠体-R
+2026-06-19 18:29:40.474	CONFIG		[sg.qr.kiarelemb.Enter:variousLoad] Enter.java:88																			设置窗口预加载完毕。
+2026-06-19 18:29:40.475	INFO		[sg.qr.kiarelemb.Enter:main] Enter.java:46																					-------------------------------------- 配置加载完毕 --------------------------------------
+2026-06-19 18:30:10.087	INFO		[sg.qr.kiarelemb.MainWindow:lambda$quickKeyLoad$0] MainWindow.java:181														************************************** 您已退出程序 **************************************

@@ -10,7 +10,8 @@ public record SubjectiveRegion(String name,
 							   int endQuestion,
 							   Rect region,
 							   GradingMode mode,
-							   BigDecimal maxScore) {
+							   BigDecimal maxScore,
+							   int pageIndex) {
 	public SubjectiveRegion {
 		name = name == null || name.isBlank() ? "主观题" : name.trim();
 		if (startQuestion < 1) {
@@ -23,6 +24,16 @@ public record SubjectiveRegion(String name,
 		region = new Rect(region.x(), region.y(), region.width(), region.height());
 		mode = mode == null ? GradingMode.MANUAL : mode;
 		maxScore = maxScore == null ? BigDecimal.ZERO : maxScore.max(BigDecimal.ZERO);
+		pageIndex = Math.max(0, pageIndex);
+	}
+
+	public SubjectiveRegion(String name,
+							int startQuestion,
+							int endQuestion,
+							Rect region,
+							GradingMode mode,
+							BigDecimal maxScore) {
+		this(name, startQuestion, endQuestion, region, mode, maxScore, 0);
 	}
 
 	public boolean containsQuestion(int questionNumber) {

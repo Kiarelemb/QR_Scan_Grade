@@ -134,10 +134,10 @@ public final class AnswerSheetTestGenerator {
 	}
 
 	private static List<String> randomAnswers(AnswerSheet answerSheet) {
-		String[] choices = {"A", "B", "C", "D"};
+		String[] choices = answerSheet.getChoiceLabels();
 		List<String> result = new ArrayList<>(answerSheet.getChoiceQuestions().size());
 		for (int i = 0; i < answerSheet.getChoiceQuestions().size(); i++) {
-			result.add(choices[QRRandomUtils.getRandomInt(4)]);
+			result.add(choices[QRRandomUtils.getRandomInt(choices.length)]);
 		}
 		return result;
 	}

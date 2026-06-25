@@ -218,7 +218,9 @@ public class ProjectEnd extends QRPanel {
 					template.choiceRegionRect(),
 					template.fillBlankRegionRect(),
 					ruleTextPane.getText(),
-					template.pageCount());
+					template.pageCount(),
+					template.subjectiveRegions(),
+					template.pictureFiles());
 			TemplateProcessor.save(updated, templateFile);
 		} catch (IOException ex) {
 			QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "保存模板计分规则失败：\n" + ex.getMessage());
@@ -336,8 +338,25 @@ public class ProjectEnd extends QRPanel {
 	}
 
 	private File manualScoreImageFile(File answerFile) {
+		if (manualRegionPageIndex() <= 0) {
+			return answerFile;
+		}
 		File backFile = project.answerBackFileFor(answerFile);
 		return backFile == null ? answerFile : backFile;
+	}
+
+	private int manualRegionPageIndex() {
+		try {
+			Template template = TemplateProcessor.load(new File(project.templateFilePath()));
+			for (sg.qr.kiarelemb.grading.model.SubjectiveRegion region : template.subjectiveRegions()) {
+				if (region.mode() == sg.qr.kiarelemb.grading.model.SubjectiveRegion.GradingMode.MANUAL
+					|| region.mode() == sg.qr.kiarelemb.grading.model.SubjectiveRegion.GradingMode.MIXED) {
+					return region.pageIndex();
+				}
+			}
+		} catch (IOException ignored) {
+		}
+		return 0;
 	}
 
 	private Rect manualRegion() {

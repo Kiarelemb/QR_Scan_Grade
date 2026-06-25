@@ -12,7 +12,8 @@ public record Template(String name, File pictureFile, AnswerSheet answerSheet,
 					   Rect examRegionRect, Rect choiceRegionRect, Rect fillBlankRegionRect,
 					   String defaultScoreRules,
 					   int pageCount,
-					   List<SubjectiveRegion> subjectiveRegions) {
+					   List<SubjectiveRegion> subjectiveRegions,
+					   List<File> pictureFiles) {
 	public Template {
 		Objects.requireNonNull(name, "name");
 		Objects.requireNonNull(pictureFile, "pictureFile");
@@ -30,6 +31,18 @@ public record Template(String name, File pictureFile, AnswerSheet answerSheet,
 		if (fillBlankRegionRect == null && !subjectiveRegions.isEmpty()) {
 			fillBlankRegionRect = subjectiveRegions.get(0).region();
 		}
+		List<File> images = new ArrayList<>();
+		if (pictureFiles != null) {
+			for (File file : pictureFiles) {
+				if (file != null) {
+					images.add(file);
+				}
+			}
+		}
+		if (images.isEmpty()) {
+			images.add(pictureFile);
+		}
+		pictureFiles = Collections.unmodifiableList(images);
 	}
 
 	public Template(String name, File pictureFile, AnswerSheet answerSheet) {
@@ -52,6 +65,14 @@ public record Template(String name, File pictureFile, AnswerSheet answerSheet,
 					String defaultScoreRules, int pageCount) {
 		this(name, pictureFile, answerSheet, examRegionRect, choiceRegionRect, fillBlankRegionRect,
 				defaultScoreRules, pageCount, null);
+	}
+
+	public Template(String name, File pictureFile, AnswerSheet answerSheet,
+					Rect examRegionRect, Rect choiceRegionRect, Rect fillBlankRegionRect,
+					String defaultScoreRules, int pageCount,
+					List<SubjectiveRegion> subjectiveRegions) {
+		this(name, pictureFile, answerSheet, examRegionRect, choiceRegionRect, fillBlankRegionRect,
+				defaultScoreRules, pageCount, subjectiveRegions, null);
 	}
 
 	private static SubjectiveRegion defaultSubjectiveRegion(Rect rect, AnswerSheet answerSheet) {

@@ -17,12 +17,15 @@ import swing.qr.kiarelemb.theme.QRColorsAndFonts;
 import swing.qr.kiarelemb.window.basic.QRDialog;
 import swing.qr.kiarelemb.window.enhance.QROpinionDialog;
 
+import javax.imageio.ImageIO;
 import javax.swing.border.LineBorder;
 import java.awt.*;
 import java.awt.event.WindowEvent;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -34,24 +37,28 @@ import java.util.List;
  */
 public class NewTmptWindow extends QRDialog {
 	private final File pictureFile;
+	private final List<File> pictureFiles;
 	private final int pageCount;
 	private LayoutDetector detector;
 	private final TmptDataSplitPane dataSplitPane;
 	private QRTextField nameField;
-	private QRTextField subjectiveTopLeftField;
-	private QRTextField subjectiveBottomRightField;
 
 	public NewTmptWindow(File pictureFile) {
-		super(MainWindow.INSTANCE);
-		this.pictureFile = pictureFile;
-		this.pageCount = 1;
-		this.dataSplitPane = new TmptDataSplitPane(null);
-		initView();
+		this(singlePictureFile(pictureFile));
 	}
 
 	public NewTmptWindow(File pictureFile, int pageCount) {
+		this(singlePictureFile(pictureFile), pageCount);
+	}
+
+	public NewTmptWindow(List<File> pictureFiles) {
+		this(pictureFiles, pictureFiles == null ? 1 : pictureFiles.size());
+	}
+
+	public NewTmptWindow(List<File> pictureFiles, int pageCount) {
 		super(MainWindow.INSTANCE);
-		this.pictureFile = pictureFile;
+		this.pictureFiles = normalizedPictureFiles(pictureFiles);
+		this.pictureFile = this.pictureFiles.get(0);
 		this.pageCount = Math.max(1, pageCount);
 		this.dataSplitPane = new TmptDataSplitPane(null);
 		initView();
@@ -84,7 +91,6 @@ public class NewTmptWindow extends QRDialog {
 		setParentWindowNotFollowMove();
 
 		mainPanel.setLayout(new BorderLayout());
-		dataSplitPane.setImageClickListener(this::fillFocusedSubjectivePoint);
 		mainPanel.add(dataSplitPane, BorderLayout.CENTER);
 
 		QRPanel bottomPanel = new QRPanel();
@@ -103,14 +109,6 @@ public class NewTmptWindow extends QRDialog {
 		QRPanel namePanel = new QRPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
 		namePanel.add(nameLabel);
 		namePanel.add(nameField);
-		namePanel.add(new QRLabel("主观题左上："));
-		subjectiveTopLeftField = new QRTextField();
-		subjectiveTopLeftField.setPreferredSize(new Dimension(110, 25));
-		namePanel.add(subjectiveTopLeftField);
-		namePanel.add(new QRLabel("右下："));
-		subjectiveBottomRightField = new QRTextField();
-		subjectiveBottomRightField.setPreferredSize(new Dimension(110, 25));
-		namePanel.add(subjectiveBottomRightField);
 		bottomPanel.add(namePanel, BorderLayout.WEST);
 
 		QRRoundButton saveButton = new QRRoundButton("启用模板");
@@ -119,28 +117,6 @@ public class NewTmptWindow extends QRDialog {
 		bottomPanel.add(saveButton, BorderLayout.EAST);
 
 		mainPanel.add(bottomPanel, BorderLayout.SOUTH);
-	}
-
-	private void fillFocusedSubjectivePoint(Point point) {
-		if (point == null) {
-			return;
-		}
-		String text = point.x + "," + point.y;
-		if (subjectiveBottomRightField != null && subjectiveBottomRightField.hasFocus()) {
-			subjectiveBottomRightField.setText(text);
-			refreshTemplatePreview();
-		} else if (subjectiveTopLeftField != null) {
-			subjectiveTopLeftField.setText(text);
-			if (subjectiveBottomRightField != null) {
-				subjectiveBottomRightField.requestFocusInWindow();
-			}
-		}
-	}
-
-	private void refreshTemplatePreview() {
-		if (detector != null) {
-			dataSplitPane.setTemplate(buildTemplate(defaultTemplateName(pictureFile)));
-		}
 	}
 
 	private void saveTemplate(java.awt.event.ActionEvent e) {
@@ -194,61 +170,126 @@ public class NewTmptWindow extends QRDialog {
 				fillBlankRegionRect(),
 				"",
 				pageCount,
-				defaultSubjectiveRegions(answerSheet)
+				defaultSubjectiveRegions(answerSheet),
+				pictureFiles
 		);
 	}
 
-	private List<SubjectiveRegion> defaultSubjectiveRegions(AnswerSheet answerSheet) {
-		Rect rect = fillBlankRegionRect();
-		if (rect == null) {
-			return List.of();
+	private static List<File> normalizedPictureFiles(List<File> files) {
+		if (files == null || files.isEmpty() || files.get(0) == null) {
+			throw new IllegalArgumentException("模板图片不能为空");
 		}
+		return List.copyOf(files);
+	}
+
+	private static List<File> singlePictureFile(File file) {
+		return file == null ? List.of() : List.of(file);
+	}
+
+	private List<SubjectiveRegion> defaultSubjectiveRegions(AnswerSheet answerSheet) {
+		List<SubjectiveRegion> regions = new ArrayList<>();
+		Rect firstPageRect = fillBlankRegionRect();
 		int start = answerSheet.getChoiceQuestions().size() + 1;
 		int count = Math.max(1, answerSheet.getFillBlankQuestions().size());
-		return List.of(new SubjectiveRegion("主观题1", start, start + count - 1, rect,
-				SubjectiveRegion.GradingMode.OCR, BigDecimal.ZERO));
+		if (firstPageRect != null) {
+			regions.add(new SubjectiveRegion("填空题", start, start + count - 1, firstPageRect,
+					SubjectiveRegion.GradingMode.OCR, BigDecimal.ZERO, 0));
+		}
+		if (pictureFiles.size() >= 2) {
+			int secondPageQuestion = regions.isEmpty() ? start : start + count;
+			regions.add(new SubjectiveRegion("主观题2", secondPageQuestion, secondPageQuestion,
+					secondPageSubjectiveRect(answerSheet),
+					SubjectiveRegion.GradingMode.MANUAL, BigDecimal.ZERO, 1));
+		}
+		return List.copyOf(regions);
+	}
+
+	private Rect secondPageSubjectiveRect(AnswerSheet answerSheet) {
+		try {
+			BufferedImage image = ImageIO.read(pictureFiles.get(1));
+			if (image != null) {
+				Rect frame = detectLargeWritingFrame(image);
+				if (frame != null) {
+					return scaleRect(frame, image.getWidth(), image.getHeight(),
+							answerSheet.getImageWidth(), answerSheet.getImageHeight());
+				}
+			}
+		} catch (IOException ignored) {
+		}
+		int marginX = Math.max(1, answerSheet.getImageWidth() / 10);
+		int marginY = Math.max(1, answerSheet.getImageHeight() / 12);
+		return new Rect(marginX, marginY,
+				Math.max(1, answerSheet.getImageWidth() - marginX * 2),
+				Math.max(1, answerSheet.getImageHeight() - marginY * 2));
+	}
+
+	private Rect detectLargeWritingFrame(BufferedImage image) {
+		int width = image.getWidth();
+		int height = image.getHeight();
+		int horizontalThreshold = Math.max(120, width / 3);
+		int verticalThreshold = Math.max(120, height / 3);
+		int minY = Integer.MAX_VALUE;
+		int maxY = Integer.MIN_VALUE;
+		for (int y = 0; y < height; y++) {
+			int count = 0;
+			for (int x = 0; x < width; x++) {
+				if (isDark(image.getRGB(x, y))) {
+					count++;
+				}
+			}
+			if (count >= horizontalThreshold) {
+				minY = Math.min(minY, y);
+				maxY = Math.max(maxY, y);
+			}
+		}
+		int minX = Integer.MAX_VALUE;
+		int maxX = Integer.MIN_VALUE;
+		for (int x = 0; x < width; x++) {
+			int count = 0;
+			for (int y = 0; y < height; y++) {
+				if (isDark(image.getRGB(x, y))) {
+					count++;
+				}
+			}
+			if (count >= verticalThreshold) {
+				minX = Math.min(minX, x);
+				maxX = Math.max(maxX, x);
+			}
+		}
+		if (minX == Integer.MAX_VALUE || minY == Integer.MAX_VALUE) {
+			return null;
+		}
+		int frameWidth = maxX - minX + 1;
+		int frameHeight = maxY - minY + 1;
+		if (frameWidth < width / 2 || frameHeight < height / 2) {
+			return null;
+		}
+		return new Rect(minX, minY, frameWidth, frameHeight);
+	}
+
+	private boolean isDark(int rgb) {
+		int red = (rgb >> 16) & 0xff;
+		int green = (rgb >> 8) & 0xff;
+		int blue = rgb & 0xff;
+		return (red + green + blue) / 3 < 180;
+	}
+
+	private Rect scaleRect(Rect rect, int sourceWidth, int sourceHeight, int targetWidth, int targetHeight) {
+		double sx = (double) targetWidth / Math.max(1, sourceWidth);
+		double sy = (double) targetHeight / Math.max(1, sourceHeight);
+		return new Rect(
+				(int) Math.round(rect.x() * sx),
+				(int) Math.round(rect.y() * sy),
+				Math.max(1, (int) Math.round(rect.width() * sx)),
+				Math.max(1, (int) Math.round(rect.height() * sy))
+		);
 	}
 
 	private Rect fillBlankRegionRect() {
-		Rect manual = manualSubjectiveRegion();
-		if (manual != null) {
-			return manual;
-		}
 		if (detector.fillBlankCount <= 0 || detector.fillBoxW <= 0 || detector.fillBoxH <= 0) {
 			return null;
 		}
 		return new Rect(detector.fillStartX, detector.fillStartY, detector.fillBoxW, detector.fillBoxH);
-	}
-
-	private Rect manualSubjectiveRegion() {
-		Point topLeft = parsePoint(subjectiveTopLeftField == null ? "" : subjectiveTopLeftField.getText());
-		Point bottomRight = parsePoint(subjectiveBottomRightField == null ? "" : subjectiveBottomRightField.getText());
-		if (topLeft == null || bottomRight == null) {
-			return null;
-		}
-		int x1 = Math.min(topLeft.x, bottomRight.x);
-		int y1 = Math.min(topLeft.y, bottomRight.y);
-		int x2 = Math.max(topLeft.x, bottomRight.x);
-		int y2 = Math.max(topLeft.y, bottomRight.y);
-		if (x2 <= x1 || y2 <= y1) {
-			return null;
-		}
-		return new Rect(x1, y1, x2 - x1, y2 - y1);
-	}
-
-	private Point parsePoint(String text) {
-		if (text == null || text.isBlank()) {
-			return null;
-		}
-		String[] parts = text.trim().split("[,，\\s]+");
-		if (parts.length != 2) {
-			return null;
-		}
-		try {
-			return new Point(Integer.parseInt(parts[0].trim()), Integer.parseInt(parts[1].trim()));
-		} catch (NumberFormatException ex) {
-			return null;
-		}
 	}
 
 	private static Rect toRect(DetectedRect rect) {

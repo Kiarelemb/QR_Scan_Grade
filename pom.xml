@@ -10,8 +10,7 @@
 	<version>1.0-SNAPSHOT</version>
 
 	<properties>
-		<maven.compiler.source>17</maven.compiler.source>
-		<maven.compiler.target>17</maven.compiler.target>
+		<maven.compiler.release>17</maven.compiler.release>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 	</properties>
 
@@ -34,7 +33,7 @@
 			<artifactId>QR-Swing</artifactId>  <!-- 自定义 artifactId -->
 			<version>1.1</version>
 			<scope>system</scope>
-			<systemPath>/home/kiarelemb/IdeaProjects/QR_Swing.jar</systemPath>
+			<systemPath>${user.home}/IdeaProjects/QR_Swing/QR_Swing.jar</systemPath>
 		</dependency>
 	</dependencies>
 </project>

@@ -11,7 +11,9 @@ import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -28,7 +30,7 @@ public class TemplateProcessor {
 	public static final String TEMPLATE_EXTENSION = "sg";
 	private static final String META_ENTRY = "template.bin";
 	private static final String IMAGE_ENTRY_PREFIX = "image/";
-	private static final int FORMAT_VERSION = 2;
+	private static final int FORMAT_VERSION = 3;
 
 	private TemplateProcessor() {
 	}
@@ -37,9 +39,11 @@ public class TemplateProcessor {
 		Objects.requireNonNull(template, "template");
 		Objects.requireNonNull(targetFile, "targetFile");
 
-		File imageFile = template.pictureFile();
-		if (!imageFile.isFile()) {
-			throw new FileNotFoundException("Template image not found: " + imageFile.getAbsolutePath());
+		List<File> imageFiles = template.pictureFiles().isEmpty() ? List.of(template.pictureFile()) : template.pictureFiles();
+		for (File imageFile : imageFiles) {
+			if (!imageFile.isFile()) {
+				throw new FileNotFoundException("Template image not found: " + imageFile.getAbsolutePath());
+			}
 		}
 
 		File sgFile = withSgExtension(targetFile);
@@ -48,8 +52,11 @@ public class TemplateProcessor {
 			Files.createDirectories(parent.toPath());
 		}
 
-		String imageEntryName = IMAGE_ENTRY_PREFIX + safeImageFileName(imageFile);
-		TemplateData data = TemplateData.from(template, imageEntryName);
+		List<String> imageEntryNames = new ArrayList<>();
+		for (int i = 0; i < imageFiles.size(); i++) {
+			imageEntryNames.add(IMAGE_ENTRY_PREFIX + String.format("%03d-", i + 1) + safeImageFileName(imageFiles.get(i)));
+		}
+		TemplateData data = TemplateData.from(template, imageEntryNames);
 
 		try (ZipOutputStream zip = new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(sgFile)))) {
 			zip.putNextEntry(new ZipEntry(META_ENTRY));
@@ -58,9 +65,11 @@ public class TemplateProcessor {
 			objectOut.flush();
 			zip.closeEntry();
 
-			zip.putNextEntry(new ZipEntry(imageEntryName));
-			Files.copy(imageFile.toPath(), zip);
-			zip.closeEntry();
+			for (int i = 0; i < imageFiles.size(); i++) {
+				zip.putNextEntry(new ZipEntry(imageEntryNames.get(i)));
+				Files.copy(imageFiles.get(i).toPath(), zip);
+				zip.closeEntry();
+			}
 		}
 		return sgFile;
 	}
@@ -72,7 +81,7 @@ public class TemplateProcessor {
 		}
 
 		TemplateData data = null;
-		File imageFile = null;
+		Map<String, File> imageFilesByEntryName = new LinkedHashMap<>();
 
 		try (ZipInputStream zip = new ZipInputStream(new BufferedInputStream(new FileInputStream(sgFile)))) {
 			ZipEntry entry;
@@ -93,7 +102,7 @@ public class TemplateProcessor {
 						throw new IOException("Cannot read template metadata: " + sgFile.getAbsolutePath(), e);
 					}
 				} else if (entry.getName().startsWith(IMAGE_ENTRY_PREFIX)) {
-					imageFile = extractImageToTempFile(entry.getName(), zip);
+					imageFilesByEntryName.put(entry.getName(), extractImageToTempFile(entry.getName(), zip));
 				}
 				zip.closeEntry();
 			}
@@ -105,20 +114,22 @@ public class TemplateProcessor {
 		if (data.version < 1 || data.version > FORMAT_VERSION) {
 			throw new IOException("Unsupported template version: " + data.version);
 		}
-		if (imageFile == null) {
+		List<File> imageFiles = orderedImageFiles(data, imageFilesByEntryName);
+		if (imageFiles.isEmpty()) {
 			throw new IOException("Missing template image: " + sgFile.getAbsolutePath());
 		}
 
 		return new Template(
 				data.name,
-				imageFile,
+				imageFiles.get(0),
 				data.answerSheet.toAnswerSheet(),
 				toOpenCvRect(data.examRegionRect),
 				toOpenCvRect(data.choiceRegionRect),
 				toOpenCvRect(data.fillBlankRegionRect),
 				data.defaultScoreRules,
 				Math.max(1, data.pageCount),
-				toSubjectiveRegions(data.subjectiveRegions)
+				toSubjectiveRegions(data.subjectiveRegions),
+				imageFiles
 		);
 	}
 
@@ -193,6 +204,7 @@ public class TemplateProcessor {
 		private final int version;
 		private final String name;
 		private final String imageEntryName;
+		private final List<String> imageEntryNames;
 		private final AnswerSheetData answerSheet;
 		private final RectData examRegionRect;
 		private final RectData choiceRegionRect;
@@ -206,9 +218,21 @@ public class TemplateProcessor {
 							 String defaultScoreRules,
 							 int pageCount,
 							 List<SubjectiveRegionData> subjectiveRegions) {
+			this(version, name, imageEntryName, imageEntryName == null ? List.of() : List.of(imageEntryName),
+					answerSheet, examRegionRect, choiceRegionRect, fillBlankRegionRect, defaultScoreRules,
+					pageCount, subjectiveRegions);
+		}
+
+		private TemplateData(int version, String name, String imageEntryName, List<String> imageEntryNames,
+							 AnswerSheetData answerSheet,
+							 RectData examRegionRect, RectData choiceRegionRect, RectData fillBlankRegionRect,
+							 String defaultScoreRules,
+							 int pageCount,
+							 List<SubjectiveRegionData> subjectiveRegions) {
 			this.version = version;
 			this.name = name;
 			this.imageEntryName = imageEntryName;
+			this.imageEntryNames = imageEntryNames == null ? List.of() : List.copyOf(imageEntryNames);
 			this.answerSheet = answerSheet;
 			this.examRegionRect = examRegionRect;
 			this.choiceRegionRect = choiceRegionRect;
@@ -218,11 +242,12 @@ public class TemplateProcessor {
 			this.subjectiveRegions = subjectiveRegions == null ? List.of() : List.copyOf(subjectiveRegions);
 		}
 
-		private static TemplateData from(Template template, String imageEntryName) {
+		private static TemplateData from(Template template, List<String> imageEntryNames) {
 			return new TemplateData(
 					FORMAT_VERSION,
 					template.name(),
-					imageEntryName,
+					imageEntryNames.isEmpty() ? null : imageEntryNames.get(0),
+					imageEntryNames,
 					AnswerSheetData.from(removeAnswers(template.answerSheet())),
 					RectData.fromNullable(template.examRegionRect()),
 					RectData.fromNullable(template.choiceRegionRect()),
@@ -239,17 +264,18 @@ public class TemplateProcessor {
 										int endQuestion,
 										RectData region,
 										SubjectiveRegion.GradingMode mode,
-										BigDecimal maxScore) implements Serializable {
+										BigDecimal maxScore,
+										int pageIndex) implements Serializable {
 		@Serial
 		private static final long serialVersionUID = 1L;
 
 		private static SubjectiveRegionData from(SubjectiveRegion region) {
 			return new SubjectiveRegionData(region.name(), region.startQuestion(), region.endQuestion(),
-					RectData.from(region.region()), region.mode(), region.maxScore());
+					RectData.from(region.region()), region.mode(), region.maxScore(), region.pageIndex());
 		}
 
 		private SubjectiveRegion toSubjectiveRegion() {
-			return new SubjectiveRegion(name, startQuestion, endQuestion, region.toRect(), mode, maxScore);
+			return new SubjectiveRegion(name, startQuestion, endQuestion, region.toRect(), mode, maxScore, pageIndex);
 		}
 	}
 
@@ -335,5 +361,25 @@ public class TemplateProcessor {
 			}
 		}
 		return result;
+	}
+
+	private static List<File> orderedImageFiles(TemplateData data, Map<String, File> imageFilesByEntryName) {
+		List<String> entryNames = data.imageEntryNames;
+		if ((entryNames == null || entryNames.isEmpty()) && data.imageEntryName != null) {
+			entryNames = List.of(data.imageEntryName);
+		}
+		List<File> imageFiles = new ArrayList<>();
+		if (entryNames != null) {
+			for (String entryName : entryNames) {
+				File file = imageFilesByEntryName.get(entryName);
+				if (file != null) {
+					imageFiles.add(file);
+				}
+			}
+		}
+		if (imageFiles.isEmpty()) {
+			imageFiles.addAll(imageFilesByEntryName.values());
+		}
+		return imageFiles;
 	}
 }

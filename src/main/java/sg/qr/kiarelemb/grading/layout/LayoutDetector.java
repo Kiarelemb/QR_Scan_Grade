@@ -38,6 +38,7 @@ public class LayoutDetector {
 	public int choiceBubbleH;     // 选择题气泡高度
 	public int choiceHGap;        // 选择题水平间距
 	public int choiceVGap;        // 选择题垂直间距
+	public int choiceOptionCount = 4; // 每道选择题选项数，支持 ABC / ABCD
 
 	public int fillStartX;        // 填空题大框起始 X
 	public int fillStartY;        // 填空题大框起始 Y
@@ -261,15 +262,14 @@ public class LayoutDetector {
 		List<Integer> sortedRows = new ArrayList<>(rowGroups.keySet());
 		Collections.sort(sortedRows);
 
-		// 寻找第一个（最靠上）有4个等间距框的行作为选择题起始行
+		// 寻找第一个（最靠上）有3个或4个等间距框的行作为选择题起始行
 		for (int rowKey : sortedRows) {
 			List<Integer> xCoords = rowGroups.get(rowKey);
-			if (xCoords.size() >= 4) {
+			if (xCoords.size() >= 3) {
 				Collections.sort(xCoords);
 				int g1 = xCoords.get(1) - xCoords.get(0);
 				int g2 = xCoords.get(2) - xCoords.get(1);
-				int g3 = xCoords.get(3) - xCoords.get(2);
-				if (Math.abs(g1 - g2) < 5 && Math.abs(g2 - g3) < 5) {
+				if (Math.abs(g1 - g2) < 5) {
 					this.choiceStartX = xCoords.get(0) - bubbleW / 2;
 					this.choiceStartY = rowKey - bubbleH / 2;
 					this.choiceHGap = g1;
@@ -284,7 +284,7 @@ public class LayoutDetector {
 			for (int i = 1; i < sortedRows.size(); i++) {
 				List<DetectedRect> prevRow = rowRectGroups.get(sortedRows.get(i - 1));
 				List<DetectedRect> currRow = rowRectGroups.get(sortedRows.get(i));
-				if (prevRow.size() >= 4 && currRow.size() >= 4) {
+				if (prevRow.size() >= 3 && currRow.size() >= 3) {
 					// 取两行的平均中心Y坐标
 					int prevAvgY = (int) prevRow.stream().mapToInt(r -> r.cy).average().orElse(0);
 					int currAvgY = (int) currRow.stream().mapToInt(r -> r.cy).average().orElse(0);
@@ -303,7 +303,7 @@ public class LayoutDetector {
 
 	/**
 	 * 从已检测的矩形中推断选择题的列X坐标和行Y坐标。
-	 * 核心思路：在同一行内，连续的气泡间距<100px属于同一"题组"（ABCD），间距>100px表示新的一列。
+	 * 核心思路：在同一行内，连续的气泡间距<100px属于同一题组选项，间距>100px表示新的一列。
 	 */
 	private void inferChoiceColumns(Map<Integer, List<Integer>> rowGroups,
 									List<Integer> sortedRows,
@@ -319,29 +319,44 @@ public class LayoutDetector {
 		}
 
 		List<RowInfo> rowInfos = new ArrayList<>();
+		List<Integer> detectedOptionCounts = new ArrayList<>();
 		for (int rowKey : sortedRows) {
 			List<Integer> xCoords = rowGroups.get(rowKey);
-			if (xCoords == null || xCoords.size() < 4) continue;
+			if (xCoords == null || xCoords.size() < 3) continue;
 
 			Collections.sort(xCoords);
 			List<Integer> colStarts = new ArrayList<>();
+			List<Integer> optionCounts = new ArrayList<>();
 			int groupStart = xCoords.get(0);
-			int optionGap = medianInt(new int[]{
-					xCoords.get(1) - xCoords.get(0),
-					xCoords.get(2) - xCoords.get(1),
-					xCoords.get(3) - xCoords.get(2)
-			});
+			int optionGap = inferOptionGap(xCoords);
+			if (this.choiceHGap <= 0 && optionGap > 0) {
+				this.choiceHGap = optionGap;
+			}
 			int columnBreakGap = Math.max(100, optionGap * 2);
 
 			for (int i = 1; i < xCoords.size(); i++) {
 				int gap = xCoords.get(i) - xCoords.get(i - 1);
 				if (gap > columnBreakGap) {
-					colStarts.add(groupStart - bubbleW / 2);
+					int optionCount = optionCountInGroup(xCoords, groupStart, i);
+					if (optionCount >= 3 && optionCount <= 4) {
+						colStarts.add(groupStart - bubbleW / 2);
+						optionCounts.add(optionCount);
+					}
 					groupStart = xCoords.get(i);
 				}
 			}
-			colStarts.add(groupStart - bubbleW / 2);
-			rowInfos.add(new RowInfo(rowKey - bubbleH / 2, colStarts));
+			int optionCount = optionCountInGroup(xCoords, groupStart, xCoords.size());
+			if (optionCount >= 3 && optionCount <= 4) {
+				colStarts.add(groupStart - bubbleW / 2);
+				optionCounts.add(optionCount);
+			}
+			if (!colStarts.isEmpty()) {
+				detectedOptionCounts.addAll(optionCounts);
+				rowInfos.add(new RowInfo(rowKey - bubbleH / 2, colStarts));
+			}
+		}
+		if (!detectedOptionCounts.isEmpty()) {
+			this.choiceOptionCount = dominantCount(detectedOptionCounts);
 		}
 
 		if (rowInfos.isEmpty()) {
@@ -420,6 +435,7 @@ public class LayoutDetector {
 		this.choiceQuestionsPerCol = flatCounts.stream().mapToInt(Integer::intValue).toArray();
 
 		logger.info("========== 选择题布局结构 ==========");
+		logger.info("每题选项数: " + choiceOptionCount);
 		logger.info("大行数: " + choiceRows);
 		for (int i = 0, base = 0; i < choiceRows; i++) {
 			StringBuilder rowLog = new StringBuilder("第")
@@ -454,6 +470,7 @@ public class LayoutDetector {
 		logger.info("选择题起始X: " + choiceStartX + ", 起始Y: " + choiceStartY);
 		logger.info("选择题气泡: " + choiceBubbleW + "x" + choiceBubbleH);
 		logger.info("选择题间距: H=" + choiceHGap + ", V=" + choiceVGap);
+		logger.info("选择题选项数: " + choiceOptionCount);
 		logger.info("填空题大框: X=" + fillStartX + ", Y=" + fillStartY + ", W=" + fillBoxW + ", H=" + fillBoxH);
 		logger.info("==========================================");
 
@@ -476,7 +493,7 @@ public class LayoutDetector {
 				choiceBubbleW, choiceBubbleH, choiceHGap, choiceVGap,
 				// 选择题布局结构
 				choiceRows, choiceColsPerRow, choiceRowStartYs, choiceColStartXs,
-				choiceQuestionsPerCol,
+				choiceQuestionsPerCol, choiceOptionCount,
 				// 填空题参数
 				fillBlankCount, fillStartX, fillStartY,
 				fillBoxW, fillBoxH,
@@ -522,6 +539,34 @@ public class LayoutDetector {
 		int[] sorted = values.clone();
 		Arrays.sort(sorted);
 		return sorted[sorted.length / 2];
+	}
+
+	private static int inferOptionGap(List<Integer> sortedXCoords) {
+		if (sortedXCoords == null || sortedXCoords.size() < 3) {
+			return 0;
+		}
+		List<Integer> smallGaps = new ArrayList<>();
+		for (int i = 1; i < sortedXCoords.size(); i++) {
+			int gap = sortedXCoords.get(i) - sortedXCoords.get(i - 1);
+			if (gap > 0 && gap <= 100) {
+				smallGaps.add(gap);
+			}
+		}
+		if (smallGaps.isEmpty()) {
+			return sortedXCoords.get(1) - sortedXCoords.get(0);
+		}
+		Collections.sort(smallGaps);
+		return smallGaps.get(smallGaps.size() / 2);
+	}
+
+	private static int optionCountInGroup(List<Integer> sortedXCoords, int groupStartX, int endExclusive) {
+		int count = 0;
+		for (int i = 0; i < endExclusive && i < sortedXCoords.size(); i++) {
+			if (sortedXCoords.get(i) >= groupStartX) {
+				count++;
+			}
+		}
+		return count;
 	}
 
 	private static boolean isBubbleCandidate(DetectedRect r) {
@@ -741,6 +786,7 @@ public class LayoutDetector {
 					fillBoxH = matchedFillRect.h;
 					fillBlankCount = 1;
 				}
+				trimAndNormalizeChoiceLayout(choiceRegionRect);
 			} else {
 				logger.warning("⚠️ 未找到包含选择题起始坐标的大矩形");
 			}
@@ -759,6 +805,92 @@ public class LayoutDetector {
 					choiceRegionRect.width(), choiceRegionRect.height()));
 		}
 		logger.info("=====================================");
+	}
+
+	private void trimAndNormalizeChoiceLayout(Rect validChoiceRegion) {
+		if (validChoiceRegion == null
+			|| choiceRows <= 0
+			|| choiceColsPerRow == null
+			|| choiceRowStartYs == null
+			|| choiceColStartXs == null
+			|| choiceQuestionsPerCol == null) {
+			return;
+		}
+
+		int oldTotal = Arrays.stream(choiceQuestionsPerCol).sum();
+		List<Integer> rowStarts = new ArrayList<>();
+		List<Integer> colsPerRow = new ArrayList<>();
+		List<Integer> colStarts = new ArrayList<>();
+		List<Integer> questionsPerCol = new ArrayList<>();
+		int regionBottom = validChoiceRegion.y() + validChoiceRegion.height();
+		int sourceIndex = 0;
+
+		for (int row = 0; row < choiceRows; row++) {
+			int rowY = choiceRowStartYs[row];
+			List<Integer> keptColStarts = new ArrayList<>();
+			List<Integer> keptCounts = new ArrayList<>();
+			for (int col = 0; col < choiceColsPerRow[row] && sourceIndex < choiceQuestionsPerCol.length; col++) {
+				int colX = choiceColStartXs[sourceIndex];
+				int count = choiceQuestionsPerCol[sourceIndex];
+				sourceIndex++;
+				if (count <= 0 || colX < validChoiceRegion.x() - choiceBubbleW
+					|| colX > validChoiceRegion.x() + validChoiceRegion.width()
+					|| rowY < validChoiceRegion.y() - choiceBubbleH
+					|| rowY >= regionBottom) {
+					continue;
+				}
+				int visibleCount = 0;
+				for (int q = 0; q < count; q++) {
+					int questionY = rowY + q * choiceVGap;
+					if (questionY >= validChoiceRegion.y() - choiceBubbleH && questionY < regionBottom) {
+						visibleCount++;
+					}
+				}
+				if (visibleCount > 0) {
+					keptColStarts.add(colX);
+					keptCounts.add(visibleCount);
+				}
+			}
+			if (keptCounts.isEmpty()) {
+				continue;
+			}
+			int normalizedCount = dominantCount(keptCounts);
+			rowStarts.add(rowY);
+			colsPerRow.add(keptCounts.size());
+			for (int i = 0; i < keptCounts.size(); i++) {
+				colStarts.add(keptColStarts.get(i));
+				questionsPerCol.add(Math.max(keptCounts.get(i), normalizedCount));
+			}
+		}
+
+		if (questionsPerCol.isEmpty()) {
+			return;
+		}
+
+		this.choiceRows = rowStarts.size();
+		this.choiceRowStartYs = rowStarts.stream().mapToInt(Integer::intValue).toArray();
+		this.choiceColsPerRow = colsPerRow.stream().mapToInt(Integer::intValue).toArray();
+		this.choiceColStartXs = colStarts.stream().mapToInt(Integer::intValue).toArray();
+		this.choiceQuestionsPerCol = questionsPerCol.stream().mapToInt(Integer::intValue).toArray();
+		int newTotal = Arrays.stream(choiceQuestionsPerCol).sum();
+		if (newTotal != oldTotal) {
+			logger.info("选择题布局已按选择题大框修正: " + oldTotal + " -> " + newTotal);
+		}
+	}
+
+	private static int dominantCount(List<Integer> counts) {
+		if (counts == null || counts.isEmpty()) {
+			return 0;
+		}
+		Map<Integer, Integer> frequencies = new HashMap<>();
+		for (int count : counts) {
+			frequencies.put(count, frequencies.getOrDefault(count, 0) + 1);
+		}
+		return frequencies.entrySet().stream()
+				.max(Comparator.<Map.Entry<Integer, Integer>>comparingInt(Map.Entry::getValue)
+						.thenComparingInt(Map.Entry::getKey))
+				.map(Map.Entry::getKey)
+				.orElse(0);
 	}
 
 	private static Mat deskewForLayout(Mat gray) {

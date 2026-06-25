@@ -306,15 +306,18 @@ public final class ProjectManualReviewPanel extends QRPanel implements ProjectSt
 			if (reviewedAnswer == null || reviewedAnswer.examineeId() == null || reviewedAnswer.examineeId().isBlank()) {
 				continue;
 			}
-			File imageFile = manualImageFile(project, answerFile);
 			for (SubjectiveRegion region : regions) {
+				File imageFile = manualImageFile(project, answerFile, region);
 				items.add(new ManualReviewItem(answerFile, imageFile, reviewedAnswer.examineeId(), region));
 			}
 		}
 		return items;
 	}
 
-	private static File manualImageFile(Project project, File answerFile) {
+	private static File manualImageFile(Project project, File answerFile, SubjectiveRegion region) {
+		if (region == null || region.pageIndex() <= 0) {
+			return answerFile;
+		}
 		File backFile = project.answerBackFileFor(answerFile);
 		return backFile == null ? answerFile : backFile;
 	}

@@ -95,5 +95,14 @@ public class AnswerSheet {
 	public List<Question> getFillBlankQuestions() { return Collections.unmodifiableList(fillBlankQuestions); }
 
 	public String[] getDigitLabels() { return DIGIT_LABELS; }
-	public String[] getChoiceLabels() { return CHOICE_LABELS; }
+	public String[] getChoiceLabels() {
+		int optionCount = choiceQuestions.stream()
+				.map(Question::optionRegions)
+				.filter(Objects::nonNull)
+				.mapToInt(List::size)
+				.max()
+				.orElse(CHOICE_LABELS.length);
+		optionCount = Math.max(1, Math.min(CHOICE_LABELS.length, optionCount));
+		return Arrays.copyOf(CHOICE_LABELS, optionCount);
+	}
 }

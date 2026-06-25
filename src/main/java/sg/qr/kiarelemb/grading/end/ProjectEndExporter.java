@@ -30,35 +30,23 @@ public final class ProjectEndExporter {
 			return;
 		}
 		QRFileSelectDialog dialog = new QRFileSelectDialog(MainWindow.INSTANCE,
-				QRFileSelectDialog.SelectMode.DIRECTORY_ONLY,
+				QRFileSelectDialog.SelectMode.SAVE_FILE,
 				new File("."),
-				"请选择成绩导出文件夹");
+				"请选择成绩导出文件夹并输入文件名","csv");
 		dialog.setVisible(true);
 		if (!dialog.selectedSucceeded()) {
 			return;
 		}
-		QRValueInputDialog nameInput = new QRValueInputDialog(MainWindow.INSTANCE, "合法的文件名", "请输入导出文件名：");
-		nameInput.setDefaultValue("成绩输出");
-		nameInput.setVisible(true);
-		String fileName = nameInput.getAnswer();
-		if (fileName == null) {
-			return;
-		}
-		fileName = fileName.trim();
-		if (fileName.isEmpty()) {
-			QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "文件名不能为空。");
-			return;
-		}
+		String fileName = dialog.selectedFilePath().trim();
 		if (fileName.toLowerCase(Locale.ROOT).endsWith(".csv")) {
 			fileName = fileName.substring(0, fileName.length() - 4);
 		}
 
 		String content = buildScoreExportCsv(projectEnd);
-		File directory = dialog.selectedFile();
 		try {
-			File utf8File = new File(directory, fileName + "_utf8.csv");
+			File utf8File = new File(fileName + "_utf8.csv");
 			Files.writeString(utf8File.toPath(), content, StandardCharsets.UTF_8);
-			File systemFile = new File(directory, fileName + "_gbk.csv");
+			File systemFile = new File(fileName + "_gbk.csv");
 			Files.writeString(systemFile.toPath(), content, Charset.forName("GBK"));
 			QROpinionDialog.messageTellShow(MainWindow.INSTANCE,
 					"成绩已导出(请优先打开gbk文件)：\n" + utf8File.getName() + "\n" + systemFile.getName());

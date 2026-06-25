@@ -11,6 +11,7 @@ import swing.qr.kiarelemb.window.utils.QRPicturePreviewDialog;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.io.File;
+import java.util.List;
 
 import static sg.qr.kiarelemb.data.Keys.SELECTED_FILE_DIRECTORY;
 
@@ -49,23 +50,23 @@ public class NewTemplateBtn extends StartBtn {
 	}
 
 	private static QRPicturePreviewDialog getPicturePreviewDialog(QRFileSelectDialog fileSelect) {
-		File templateImageFile;
-		int pageCount;
+		List<File> templateImageFiles;
 		try {
-			templateImageFile = DocumentImageLoader.firstImage(fileSelect.selectedFile());
-			pageCount = DocumentImageLoader.pdfPageCount(fileSelect.selectedFile());
+			templateImageFiles = DocumentImageLoader.documentImages(fileSelect.selectedFile());
+			if (templateImageFiles.isEmpty()) {
+				throw new IllegalStateException("文档没有可读取的页面：" + fileSelect.selectedFile().getAbsolutePath());
+			}
 		} catch (Exception ex) {
 			QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "读取模板文件失败：\n" + ex.getMessage());
-			templateImageFile = fileSelect.selectedFile();
-			pageCount = 1;
+			templateImageFiles = List.of(fileSelect.selectedFile());
 		}
-		File selectedTemplateImage = templateImageFile;
-		int selectedPageCount = pageCount;
-		QRPicturePreviewDialog dialog = new QRPicturePreviewDialog(MainWindow.INSTANCE, selectedTemplateImage, true) {
+		List<File> selectedTemplateImages = templateImageFiles;
+		File[] selectedTemplateImageArray = selectedTemplateImages.toArray(File[]::new);
+		QRPicturePreviewDialog dialog = new QRPicturePreviewDialog(MainWindow.INSTANCE, selectedTemplateImageArray, true) {
 			@Override
 			protected void sureAction(ActionEvent e) {
 				super.sureAction(e);
-				NewTmptWindow window = new NewTmptWindow(selectedTemplateImage, selectedPageCount);
+				NewTmptWindow window = new NewTmptWindow(selectedTemplateImages);
 				window.setVisible(true);
 			}
 		};

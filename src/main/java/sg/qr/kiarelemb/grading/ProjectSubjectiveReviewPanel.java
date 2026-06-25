@@ -134,9 +134,10 @@ public final class ProjectSubjectiveReviewPanel extends QRPanel implements Proje
 		File answerFile = project.answerFiles().get(index);
 		progressLabel.setText("当前：" + answerFile.getName() + "，进度：" + (index + 1) + " / " + project.answerFiles().size());
 		try {
-			File subjectiveFile = subjectiveImageFile(answerFile);
+			sg.qr.kiarelemb.grading.model.SubjectiveRegion modelRegion = subjectiveRegion(template);
+			File subjectiveFile = subjectiveImageFile(answerFile, modelRegion);
 			BufferedImage image = ImageIO.read(subjectiveFile);
-			currentSubjectiveImage = cropSubjectiveRegion(image, calibratedSubjectiveRegion(subjectiveFile));
+			currentSubjectiveImage = cropSubjectiveRegion(image, calibratedSubjectiveRegion(subjectiveFile, modelRegion));
 			picturePanel.setImage(currentSubjectiveImage, pictureDisplaySize(currentSubjectiveImage));
 			picturePanel.resetView();
 			String saved = project.subjectiveAnswerFor(answerFile);
@@ -149,25 +150,27 @@ public final class ProjectSubjectiveReviewPanel extends QRPanel implements Proje
 		}
 	}
 
-	private SubjectiveRegion calibratedSubjectiveRegion(File answerFile) {
+	private CroppedRegion calibratedSubjectiveRegion(File answerFile, sg.qr.kiarelemb.grading.model.SubjectiveRegion modelRegion) {
 		try {
 			AnswerSheetCalibrator.CalibrationResult calibration = AnswerSheetCalibrator.calibrate(ImagePreprocessor.preprocess(answerFile), template, template.answerSheet());
-			Rect region = subjectiveRegion(new Template(template.name(), template.pictureFile(), calibration.answerSheet(), calibration.examRegionRect(), calibration.choiceRegionRect(), calibration.fillBlankRegionRect(), template.defaultScoreRules(), template.pageCount(), template.subjectiveRegions()));
+			sg.qr.kiarelemb.grading.model.SubjectiveRegion region = subjectiveRegion(new Template(template.name(), template.pictureFile(), calibration.answerSheet(), calibration.examRegionRect(), calibration.choiceRegionRect(), calibration.fillBlankRegionRect(), template.defaultScoreRules(), template.pageCount(), template.subjectiveRegions(), template.pictureFiles()));
 			if (region != null) {
-				Rect expanded = expandSingleFillRegion(region, calibration.choiceRegionRect(), calibration.answerSheet().getFillBlankQuestions().size());
-				return new SubjectiveRegion(expanded, calibration.answerSheet().getImageWidth(), calibration.answerSheet().getImageHeight());
+				Rect expanded = expandSingleFillRegion(region.region(), calibration.choiceRegionRect(), calibration.answerSheet().getFillBlankQuestions().size());
+				return new CroppedRegion(expanded, calibration.answerSheet().getImageWidth(), calibration.answerSheet().getImageHeight());
 			}
 		} catch (Exception ignored) {
 		}
-		Rect region = subjectiveRegion(template);
-		if (region == null) {
+		if (modelRegion == null) {
 			return null;
 		}
-		Rect expanded = expandSingleFillRegion(region, template.choiceRegionRect(), template.answerSheet().getFillBlankQuestions().size());
-		return new SubjectiveRegion(expanded, template.answerSheet().getImageWidth(), template.answerSheet().getImageHeight());
+		Rect expanded = expandSingleFillRegion(modelRegion.region(), template.choiceRegionRect(), template.answerSheet().getFillBlankQuestions().size());
+		return new CroppedRegion(expanded, template.answerSheet().getImageWidth(), template.answerSheet().getImageHeight());
 	}
 
-	private File subjectiveImageFile(File answerFile) {
+	private File subjectiveImageFile(File answerFile, sg.qr.kiarelemb.grading.model.SubjectiveRegion region) {
+		if (region == null || region.pageIndex() <= 0) {
+			return answerFile;
+		}
 		File backFile = project.answerBackFileFor(answerFile);
 		return backFile == null ? answerFile : backFile;
 	}
@@ -185,7 +188,7 @@ public final class ProjectSubjectiveReviewPanel extends QRPanel implements Proje
 				Math.max(1, (int) Math.round(imageH * scale)));
 	}
 
-	private BufferedImage cropSubjectiveRegion(BufferedImage image, SubjectiveRegion region) {
+	private BufferedImage cropSubjectiveRegion(BufferedImage image, CroppedRegion region) {
 		if (region == null || region.rect() == null) {
 			return image;
 		}
@@ -198,14 +201,14 @@ public final class ProjectSubjectiveReviewPanel extends QRPanel implements Proje
 		return image.getSubimage(x, y, right - x, bottom - y);
 	}
 
-	private Rect scaleRegionToImage(SubjectiveRegion region, BufferedImage image) {
+	private Rect scaleRegionToImage(CroppedRegion region, BufferedImage image) {
 		Rect rect = region.rect();
 		double sx = (double) image.getWidth() / Math.max(1, region.baseWidth());
 		double sy = (double) image.getHeight() / Math.max(1, region.baseHeight());
 		return new Rect((int) Math.round(rect.x() * sx), (int) Math.round(rect.y() * sy), Math.max(1, (int) Math.round(rect.width() * sx)), Math.max(1, (int) Math.round(rect.height() * sy)));
 	}
 
-	private Rect subjectiveRegion(Template regionTemplate) {
+	private sg.qr.kiarelemb.grading.model.SubjectiveRegion subjectiveRegion(Template regionTemplate) {
 		if (regionTemplate == null) {
 			return null;
 		}
@@ -213,10 +216,10 @@ public final class ProjectSubjectiveReviewPanel extends QRPanel implements Proje
 			for (sg.qr.kiarelemb.grading.model.SubjectiveRegion region : regionTemplate.subjectiveRegions()) {
 				if (region.mode() == sg.qr.kiarelemb.grading.model.SubjectiveRegion.GradingMode.OCR
 					|| region.mode() == sg.qr.kiarelemb.grading.model.SubjectiveRegion.GradingMode.MIXED) {
-					return region.region();
+					return region;
 				}
 			}
-			return regionTemplate.subjectiveRegions().get(0).region();
+			return null;
 		}
 		List<Question> questions = regionTemplate.answerSheet().getFillBlankQuestions();
 		int minX = Integer.MAX_VALUE;
@@ -232,9 +235,13 @@ public final class ProjectSubjectiveReviewPanel extends QRPanel implements Proje
 			}
 		}
 		if (minX != Integer.MAX_VALUE) {
-			return new Rect(minX, minY, maxX - minX, maxY - minY);
+			return new sg.qr.kiarelemb.grading.model.SubjectiveRegion("主观题1", 1, 1,
+					new Rect(minX, minY, maxX - minX, maxY - minY),
+					sg.qr.kiarelemb.grading.model.SubjectiveRegion.GradingMode.OCR, java.math.BigDecimal.ZERO);
 		}
-		return regionTemplate.fillBlankRegionRect();
+		Rect rect = regionTemplate.fillBlankRegionRect();
+		return rect == null ? null : new sg.qr.kiarelemb.grading.model.SubjectiveRegion("主观题1", 1, 1,
+				rect, sg.qr.kiarelemb.grading.model.SubjectiveRegion.GradingMode.OCR, java.math.BigDecimal.ZERO);
 	}
 
 	private Rect expandSingleFillRegion(Rect region, Rect choiceRegion, int fillQuestionCount) {
@@ -249,7 +256,7 @@ public final class ProjectSubjectiveReviewPanel extends QRPanel implements Proje
 		return new Rect(region.x(), expandedY, region.width(), region.y() + region.height() - expandedY);
 	}
 
-	private record SubjectiveRegion(Rect rect, int baseWidth, int baseHeight) {
+	private record CroppedRegion(Rect rect, int baseWidth, int baseHeight) {
 	}
 
 	private String defaultSubjectiveText() {

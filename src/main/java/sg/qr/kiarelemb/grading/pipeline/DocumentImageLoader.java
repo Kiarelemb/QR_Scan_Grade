@@ -23,14 +23,18 @@ public final class DocumentImageLoader {
 	}
 
 	public static File firstImage(File source) throws IOException {
-		if (isPdfFile(source)) {
-			List<File> pages = renderPdf(source);
-			if (pages.isEmpty()) {
-				throw new IOException("PDF 没有可读取的页面：" + source.getAbsolutePath());
-			}
-			return pages.get(0);
+		List<File> images = documentImages(source);
+		if (images.isEmpty()) {
+			throw new IOException("文档没有可读取的页面：" + source.getAbsolutePath());
 		}
-		return source;
+		return images.get(0);
+	}
+
+	public static List<File> documentImages(File source) throws IOException {
+		if (isPdfFile(source)) {
+			return renderPdf(source);
+		}
+		return List.of(source);
 	}
 
 	public static List<File> sortedAnswerImages(File directory) throws IOException {

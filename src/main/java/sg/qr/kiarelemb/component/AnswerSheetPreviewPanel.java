@@ -13,7 +13,6 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.image.BufferedImage;
 import java.util.List;
-import java.util.function.Consumer;
 
 public class AnswerSheetPreviewPanel extends PicturePanel {
 	private static final Font TEXT_FONT = QRColorsAndFonts.createFont(18);
@@ -24,7 +23,7 @@ public class AnswerSheetPreviewPanel extends PicturePanel {
 	private final Color fillColor;
 	private Template template;
 	private boolean colorInverted;
-	private Consumer<Point> imageClickListener;
+	private int pageIndex;
 
 	public AnswerSheetPreviewPanel(String emptyText, Dimension preferredSize, Dimension minimumSize,
 								   Color examColor, Color choiceColor, Color fillColor) {
@@ -57,8 +56,14 @@ public class AnswerSheetPreviewPanel extends PicturePanel {
 		this.image = null;
 		this.pictureSize = null;
 		this.template = null;
+		this.pageIndex = 0;
 		resetView();
 		setZoom(1.0);
+		repaint();
+	}
+
+	public void setPageIndex(int pageIndex) {
+		this.pageIndex = Math.max(0, pageIndex);
 		repaint();
 	}
 
@@ -75,35 +80,11 @@ public class AnswerSheetPreviewPanel extends PicturePanel {
 
 	@Override
 	protected void mouseClick(MouseEvent e) {
-		Point imagePoint = toImagePoint(e.getPoint());
-		if (imagePoint != null && imageClickListener != null) {
-			imageClickListener.accept(imagePoint);
-		}
 		if (e.getClickCount() >= 2) {
 			resetView();
 			setZoom(1.0);
 			repaint();
 		}
-	}
-
-	public void setImageClickListener(Consumer<Point> imageClickListener) {
-		this.imageClickListener = imageClickListener;
-	}
-
-	private Point toImagePoint(Point panelPoint) {
-		if (image == null || panelPoint == null) {
-			return null;
-		}
-		DrawBox box = pictureBox();
-		if (panelPoint.x < box.x() || panelPoint.y < box.y()
-			|| panelPoint.x > box.x() + box.w() || panelPoint.y > box.y() + box.h()) {
-			return null;
-		}
-		int x = (int) Math.round((panelPoint.x - box.x()) * ((double) box.baseW() / Math.max(1, box.w())));
-		int y = (int) Math.round((panelPoint.y - box.y()) * ((double) box.baseH() / Math.max(1, box.h())));
-		x = Math.max(0, Math.min(box.baseW() - 1, x));
-		y = Math.max(0, Math.min(box.baseH() - 1, y));
-		return new Point(x, y);
 	}
 
 	@Override
@@ -190,10 +171,14 @@ public class AnswerSheetPreviewPanel extends PicturePanel {
 		if (image == null || template == null) {
 			return;
 		}
-		drawTemplateRegion(g2, box, template.examRegionRect(), examColor, "准考证号");
-		drawTemplateRegion(g2, box, template.choiceRegionRect(), choiceColor, "选择题");
+		if (pageIndex == 0) {
+			drawTemplateRegion(g2, box, template.examRegionRect(), examColor, "准考证号");
+			drawTemplateRegion(g2, box, template.choiceRegionRect(), choiceColor, "选择题");
+		}
 		for (sg.qr.kiarelemb.grading.model.SubjectiveRegion region : template.subjectiveRegions()) {
-			drawTemplateRegion(g2, box, region.region(), fillColor, region.name());
+			if (region.pageIndex() == pageIndex) {
+				drawTemplateRegion(g2, box, region.region(), fillColor, region.name());
+			}
 		}
 		paintOverlay(g2, box);
 	}

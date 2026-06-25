@@ -88,7 +88,7 @@ public class RegionDetector {
 			int choiceTotal, int choiceStartX, int choiceStartY,
 			int choiceBubbleW, int choiceBubbleH, int choiceHGap, int choiceVGap,
 			int choiceRows, int[] choiceColsPerRow, int[] choiceRowStartYs, int[] choiceColStartXs,
-			int[] choiceQuestionsPerCol,
+			int[] choiceQuestionsPerCol, int choiceOptionCount,
 			int fillBlankCount, int fillStartX, int fillStartY,
 			int fillBoxW, int fillBoxH,
 			String[] correctAnswers) {
@@ -100,6 +100,7 @@ public class RegionDetector {
 		examStartY += calibrationOffsetY;
 		fillStartX += calibrationOffsetX;
 		fillStartY += calibrationOffsetY;
+		choiceOptionCount = Math.max(2, Math.min(AnswerSheet.CHOICE_LABELS.length, choiceOptionCount));
 
 		// ==================== 鍑嗚€冭瘉鍙?====================
 		for (int digit = 0; digit < examIdDigits; digit++) {
@@ -129,7 +130,7 @@ public class RegionDetector {
 					int currentY = rowY + q * choiceVGap;
 
 					List<Rect> regions = new ArrayList<>();
-					for (int opt = 0; opt < 4; opt++) {
+					for (int opt = 0; opt < choiceOptionCount; opt++) {
 						int x = startX + opt * choiceHGap;
 						regions.add(new Rect(x, currentY, choiceBubbleW, choiceBubbleH));
 					}

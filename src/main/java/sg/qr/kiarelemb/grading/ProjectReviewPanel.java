@@ -151,8 +151,8 @@ public class ProjectReviewPanel extends QRPanel {
 				syncCheckTextFromTable();
 			}
 		};
-//		examIdField.addDocumentListenerAction(QRDocumentListener.TYPE.INSERT, dear);
-//		examIdField.addDocumentListenerAction(QRDocumentListener.TYPE.REMOVE, dear);
+		examIdField.textField.addDocumentListenerAction(QRDocumentListener.TYPE.INSERT, dear);
+		examIdField.textField.addDocumentListenerAction(QRDocumentListener.TYPE.REMOVE, dear);
 		examIdField.textField.addDocumentListenerAction(QRDocumentListener.TYPE.CHANGED, dear);
 
 		rightPanel.add(examPanel, BorderLayout.NORTH);

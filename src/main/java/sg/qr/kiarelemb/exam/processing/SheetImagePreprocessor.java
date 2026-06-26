@@ -3,12 +3,12 @@ package sg.qr.kiarelemb.exam.processing;
 import method.qr.kiarelemb.utils.QRLoggerUtils;
 import method.qr.kiarelemb.utils.QRStringUtils;
 import org.bytedeco.javacpp.BytePointer;
-import org.bytedeco.javacpp.indexer.FloatIndexer;
 import org.bytedeco.opencv.global.opencv_core;
 import org.bytedeco.opencv.global.opencv_imgcodecs;
 import org.bytedeco.opencv.global.opencv_imgproc;
 import org.bytedeco.opencv.opencv_core.*;
 import sg.qr.kiarelemb.data.Utils;
+import sg.qr.kiarelemb.exam.geometry.SheetGeometryUtils;
 
 import java.io.File;
 import java.util.logging.Logger;
@@ -147,7 +147,7 @@ public class SheetImagePreprocessor {
 		}
 
 		// 将四个角排序为 TL, TR, BR, BL
-		sortCornersClockwise(paperCorners);
+		SheetGeometryUtils.sortCorners(paperCorners);
 
 		logger.info("纸张四角坐标: TL(" + paperCorners[0].x() + "," + paperCorners[0].y()
 					+ ") TR(" + paperCorners[1].x() + "," + paperCorners[1].y()
@@ -173,10 +173,10 @@ public class SheetImagePreprocessor {
 		int fixedHeight = 3507;
 		logger.info("纸张四边尺寸: " + outWidth + "x" + outHeight + " → 固定输出: " + fixedWidth + "x" + fixedHeight);
 
-		Mat srcMat = buildCornerMat(
+		Mat srcMat = SheetGeometryUtils.buildCornerMat(
 				paperCorners[0], paperCorners[1],
 				paperCorners[2], paperCorners[3]);
-		Mat dstMat = buildCornerMat(
+		Mat dstMat = SheetGeometryUtils.buildCornerMat(
 				new Point(0, 0),
 				new Point(fixedWidth - 1, 0),
 				new Point(fixedWidth - 1, fixedHeight - 1),
@@ -205,62 +205,6 @@ public class SheetImagePreprocessor {
 		perspectiveMat.release();
 		hierarchy.release();
 		return result;
-	}
-
-	/**
-	 * 将无序的四个角点按顺序排列：左上(0) → 右上(1) → 右下(2) → 左下(3)
-	 */
-	private static void sortCornersClockwise(Point[] corners) {
-		// 计算质心
-		double cx = 0, cy = 0;
-		for (Point p : corners) {
-			cx += p.x();
-			cy += p.y();
-		}
-		cx /= 4;
-		cy /= 4;
-
-		final double cxx = cx;
-		final double cyy = cy;
-
-		// 以质心为原点，按角度排序（atan2）
-		java.util.Arrays.sort(corners, (a, b) -> {
-			double angleA = Math.atan2(a.y() - cyy, a.x() - cxx);
-			double angleB = Math.atan2(b.y() - cyy, b.x() - cxx);
-			return Double.compare(angleA, angleB);
-		});
-
-		// 此时角点按逆时针排列，需要找到真正的左上角（x+y 最小）
-		int tlIndex = 0;
-		double minSum = corners[0].x() + corners[0].y();
-		for (int i = 1; i < 4; i++) {
-			double sum = corners[i].x() + corners[i].y();
-			if (sum < minSum) {
-				minSum = sum;
-				tlIndex = i;
-			}
-		}
-
-		// 旋转数组，使左上角在索引 0
-		Point[] sorted = new Point[4];
-		for (int i = 0; i < 4; i++) {
-			sorted[i] = corners[(tlIndex + i) % 4];
-		}
-		System.arraycopy(sorted, 0, corners, 0, 4);
-	}
-
-	/**
-	 * 将四个角点构建为 4x1 CV_32FC2 的 Mat，供 getPerspectiveTransform 使用。
-	 */
-	private static Mat buildCornerMat(Point tl, Point tr, Point br, Point bl) {
-		Mat mat = new Mat(4, 1, opencv_core.CV_32FC2);
-		FloatIndexer idx = mat.createIndexer();
-		idx.put(0, 0, (float) tl.x(), (float) tl.y());
-		idx.put(1, 0, (float) tr.x(), (float) tr.y());
-		idx.put(2, 0, (float) br.x(), (float) br.y());
-		idx.put(3, 0, (float) bl.x(), (float) bl.y());
-		idx.release();
-		return mat;
 	}
 
 	/**
@@ -346,9 +290,7 @@ public class SheetImagePreprocessor {
 				continue;
 			}
 
-			Mat roi = binary.apply(bbox);
-			int whitePixels = opencv_core.countNonZero(roi);
-			double whiteRatio = (double) whitePixels / (bbox.width() * bbox.height());
+			double whiteRatio = BinaryRegionAnalyzer.whiteRatio(binary, bbox);
 
 			// 白边黑心：白色占比在 3%~50% 之间
 			// 太低（<3%）= 噪点轮廓；太高（>50%）= 已正常识别的实心块

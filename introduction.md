@@ -27,41 +27,72 @@ src/main/java/sg/qr/kiarelemb/
 ├── data/                               # 全局数据 / 配置
 │   ├── Keys.java                       # 设置/配置键常量
 │   └── Utils.java                      # 工具方法
-├── grading/                            # 核心阅卷逻辑
-│   ├── layout/
-│   │   ├── LayoutDetector.java         # ★ 模板布局自动检测
-│   │   └── DetectedRect.java           # 检测到的矩形数据类
+├── exam/                               # ★ 核心阅卷逻辑
+│   ├── geometry/
+│   │   ├── SheetGeometryUtils.java     # 通用几何/聚类/角点工具
+│   │   └── CoordinateTransform.java    # 基于定位标记边界的坐标变换
+│   ├── template/detect/
+│   │   ├── TemplateLayoutDetector.java # ★ 模板布局自动检测
+│   │   ├── TemplateLayoutDetectorUtils.java # 布局检测工具方法
+│   │   ├── ChoiceLayoutAnalyzer.java   # 选择题选项间距和列组推断
+│   │   └── DetectedBox.java            # 检测到的矩形数据类
 │   ├── model/
-│   │   ├── Template.java               # 模板 record
-│   │   ├── AnswerSheet.java            # 答题卡布局模型
-│   │   ├── Question.java               # 单道题模型（含区域 + 答案）
-│   │   ├── SubjectiveRegion.java       # 主观题区域定义
-│   │   ├── Project.java                # 项目状态持久化
-│   │   └── GradingResult.java          # 批阅结果
-│   ├── pipeline/
-│   │   ├── TemplateProcessor.java      # 模板 .sg 文件序列化
-│   │   ├── RegionDetector.java         # 从布局参数构建 AnswerSheet
-│   │   ├── AnswerComparator.java       # ★ 客观题批阅引擎
-│   │   ├── ChoiceReader.java           # 气泡填涂率检测
-│   │   ├── ImagePreprocessor.java      # 图像预处理（二值化、校正）
-│   │   ├── DocumentImageLoader.java    # PDF 渲染 / 图片加载
-│   │   └── AnswerSheetCalibrator.java  # 四角标记校准
-│   ├── end/                            # 阅卷结束阶段
-│   │   ├── ProjectEnd.java             # 最终汇总界面
-│   │   └── ScorePlan/ScoreResult/...   # 分数规则、导出
-│   ├── qsmethod/                       # 分数计算模式
-│   │   ├── Student.java, Section.java  # 学生/科段模型
-│   │   └── QuestionScoring.java        # 题目计分逻辑
-│   ├── ProjectReviewPanel.java         # 客观题复审批次界面
-│   ├── ProjectSubjectiveReviewPanel.java # 主观题 OCR 复核界面
-│   └── ProjectManualReviewPanel.java   # 人工批阅界面
+│   │   ├── SheetTemplate.java          # 模板数据模型
+│   │   ├── SheetLayout.java            # 答题卡布局模型
+│   │   ├── SheetQuestion.java          # 单道题模型（含区域 + 答案）
+│   │   ├── SubjectiveAnswerRegion.java # 主观题区域定义
+│   │   ├── GradingProject.java         # 项目状态持久化
+│   │   └── GradingOutcome.java         # 批阅结果
+│   ├── processing/
+│   │   ├── SheetTemplateFileStore.java # 模板 .sg 文件序列化
+│   │   │   └── TemplateSnapshot        # 模板序列化快照（DTO）
+│   │   │   └── SheetLayoutSnapshot     # 布局序列化快照（DTO）
+│   │   │   └── SheetQuestionSnapshot   # 题目序列化快照（DTO）
+│   │   │   └── SubjectiveRegionSnapshot# 主观题区域序列化快照（DTO）
+│   │   │   └── RectSnapshot            # 矩形序列化快照（DTO）
+│   │   ├── AnswerRegionBuilder.java    # 从布局参数构建 SheetLayout
+│   │   ├── ObjectiveAnswerGrader.java  # ★ 客观题批阅引擎
+│   │   ├── BubbleMarkReader.java       # 气泡填涂率检测
+│   │   ├── BinaryRegionAnalyzer.java   # 二值图 ROI / 白色像素比例工具
+│   │   ├── SheetImagePreprocessor.java # 图像预处理（二值化、校正）
+│   │   ├── DocumentPageLoader.java     # PDF 渲染 / 图片加载
+│   │   ├── SheetCalibrator.java        # 四角标记校准
+│   │   ├── RegistrationMarkDetector.java # 定位黑块检测
+│   │   ├── HandwritingOcrReader.java   # 手写识别接口
+│   │   ├── BaiduHandwritingOcr.java    # 百度 OCR 实现
+│   │   └── GoogleVisionHandwritingOcr.java # Google Vision 实现
+│   ├── scoring/                        # 分数计算模式
+│   │   ├── Examinee.java               # 考生模型
+│   │   ├── ScoreSection.java           # 科段模型
+│   │   └── QuestionScorePolicy.java    # 题目计分策略
+│   ├── results/                        # 阅卷结束阶段
+│   │   ├── ResultsPanel.java           # 最终汇总界面
+│   │   ├── ResultsActionButton.java     # 结果面板动作按钮基类
+│   │   ├── FinishProjectButton.java    # 结束流程按钮
+│   │   ├── CalculateScoresButton.java  # 计算成绩按钮
+│   │   ├── ExportResultsButton.java    # 导出成绩按钮
+│   │   ├── BackToReviewButton.java     # 返回校对按钮
+│   │   ├── ResultsExporter.java        # 成绩导出
+│   │   ├── ScoringPlan.java            # 计分方案
+│   │   ├── ScorePolicy.java            # 分数规则
+│   │   ├── RawScorePolicy.java         # 原始分数规则（解析中间态）
+│   │   └── ScoreOutcome.java           # 分数结果
+│   ├── ObjectiveReviewPanel.java       # 客观题复审批次界面
+│   ├── SubjectiveOcrReviewPanel.java   # 主观题 OCR 复核界面
+│   ├── ManualScoringPanel.java         # 人工批阅界面
+│   ├── NewGradingProjectDialog.java    # ★ 新建批阅项目对话框
+│   ├── ObjectiveReviewTextPane.java    # 客观题复核文本面板
+│   └── SubjectiveReviewTextPane.java   # 主观题复核文本面板
 ├── start/                              # 启动界面
 │   ├── StartPanel.java                 # 首页面板
-│   ├── NewTemplateBtn.java             # 新建模板按钮
-│   ├── NewTmptWindow.java              # ★ 新建模板窗口
-│   ├── ExistTemplateBtn.java           # 已有模板入口
-│   ├── ContinueProjectBtn.java         # 继续项目入口
-│   └── TmptDataSplitPane.java          # 模板分析分屏面板
+│   ├── NewTemplateButton.java          # 新建模板按钮
+│   ├── NewTemplateDialog.java          # ★ 新建模板对话框
+│   ├── ExistingTemplateButton.java     # 已有模板入口按钮
+│   ├── ExistingTemplatePanel.java      # 模板列表选择面板
+│   ├── ContinueProjectButton.java      # 继续项目入口按钮
+│   ├── ContinueProjectWindow.java      # 继续项目窗口
+│   ├── TemplateAnalysisPane.java       # 模板分析分屏面板
+│   └── StartActionButton.java          # 启动页通用按钮基类
 ├── setting/                            # 设置窗口
 ├── menu/                               # 菜单配置
 └── test/                               # 测试 / 调试
@@ -78,37 +109,37 @@ src/main/java/sg/qr/kiarelemb/
 
 ```
 PDF/图片
-  → DocumentImageLoader.documentImages()   # PDF → PNG（300DPI）
-  → NewTmptWindow                            # 打开模板图片
-    → LayoutDetector.detectFromTemplate()    # OpenCV 检测布局
+  → DocumentPageLoader.documentImages()   # PDF → PNG（300DPI）
+  → NewTemplateDialog                      # 打开模板图片
+    → TemplateLayoutDetector.detectFromTemplate()    # OpenCV 检测布局
       1. 透视校正（deskewForLayout）
       2. 自适应阈值二值化
       3. 轮廓检测 → 过滤矩形（面积 + 宽高比）
       4. 气泡聚类：识别准考证号列 + 选择题行列 + 填空大框
-      5. 构建 AnswerSheet（buildAnswerSheet → RegionDetector.buildExamSheet）
-    → Template 保存为 .sg 文件（TemplateProcessor.save）
+      5. 构建 SheetLayout（buildAnswerSheet → AnswerRegionBuilder.buildExamSheet）
+    → SheetTemplate 保存为 .sg 文件（SheetTemplateFileStore.save）
 ```
 
 ### 3.2 阅卷流程
 
 ```
 .sg 模板 + 答卷图片
-  → TemplateProcessor.load()               # 加载模板
-  → Project.refreshAnswerFilesFromDirectory()  # 扫描答卷
-  → AnswerComparator.grade()               # 逐道题判分
+  → SheetTemplateFileStore.load()         # 加载模板
+  → GradingProject.refreshAnswerFilesFromDirectory()  # 扫描答卷
+  → ObjectiveAnswerGrader.grade()         # 逐道题判分
     1. 遍历 examIdDigits → 读取准考证号
-    2. 遍历 choiceQuestions → ChoiceReader 测填涂率 → 选出最佳选项
+    2. 遍历 choiceQuestions → BubbleMarkReader 测填涂率 → 选出最佳选项
     3. 对比标准答案 → 判对错 / 标记不确定
-  → GradingResult → Project.putRecognizedAnswer()
-  → 复核界面（ProjectReviewPanel / ProjectSubjectiveReviewPanel / ProjectManualReviewPanel）
-  → 最终汇总（ProjectEnd）
+  → GradingOutcome → GradingProject.putRecognizedAnswer()
+  → 复核界面（ObjectiveReviewPanel / SubjectiveOcrReviewPanel / ManualScoringPanel）
+  → 最终汇总（ResultsPanel）
 ```
 
 ---
 
 ## 四、关键类说明
 
-### LayoutDetector（布局检测引擎）
+### TemplateLayoutDetector（布局检测引擎）
 
 最核心的类，负责从模板图像中自动推断答题卡布局。
 
@@ -120,7 +151,7 @@ PDF/图片
    - 按行聚类寻找选择题行（必须在考号区域下方）
    - 调用 `inferChoiceColumns()` 推断列结构
 4. `postProcessRects()` — 找出准考证/选择/填空大框，调用 `trimAndNormalizeChoiceLayout()` 修正
-5. `buildAnswerSheet()` — 将参数转为 `AnswerSheet` 模型
+5. `buildAnswerSheet()` — 将参数转为 `SheetLayout` 模型
 
 **关键参数：**
 | 参数 | 含义 |
@@ -132,33 +163,45 @@ PDF/图片
 | `choiceRows`, `choiceColsPerRow[]`, `choiceColStartXs[]`, `choiceQuestionsPerCol[]` | 选择题行列结构 |
 | `fillStartX/Y`, `fillBoxW/H`, `fillBlankCount` | 填空大框 |
 
-### AnswerComparator（批阅引擎）
+### ObjectiveAnswerGrader（批阅引擎）
 
-对单张答卷图像做全卷批阅。核心方法 `grade(Mat binary, AnswerSheet, String[] choiceMap)`：
+对单张答卷图像做全卷批阅。核心方法 `grade(Mat binary, SheetLayout, String[] choiceMap)`：
 
-- **准考证号识别：** 遍历 `examIdDigits` 列，每列 10 个数字泡，用 `ChoiceReader.getFillRatio()` 找填涂率最高的泡 → 组合成准考证号
+- **准考证号识别：** 遍历 `examIdDigits` 列，每列 10 个数字泡，用 `BubbleMarkReader.getFillRatio()` 找填涂率最高的泡 → 组合成准考证号
 - **选择题判分：** 对每道 `SINGLE_CHOICE` 题，`detectBestOption()` 找出填涂率最高的选项，与标准答案对比。若最高和次高填涂率差 <10%，标记为"不确定"
 - **填空题：** 当前标记为 `[待OCR]`，等待 OCR 或人工批阅
 
-### ChoiceReader（气泡填涂检测）
+### BubbleMarkReader（气泡填涂检测）
 
 在给定的 `Rect` 区域内，自适应搜索暗色像素比例来判断气泡是否被填涂。用局部搜索补偿拍照偏移。
 
-### RegionDetector
+### BinaryRegionAnalyzer（二值图区域分析）
 
-根据 `LayoutDetector` 推断出的参数（起始坐标、间距、行列结构、选项数），为每道题生成 `List<Rect>` 选项区域，构建完整的 `AnswerSheet`。
+封装二值图 ROI 裁剪、矩形膨胀/平移、白色像素比例统计和局部最佳填涂率搜索。当前被 `BubbleMarkReader`、`ObjectiveAnswerGrader`、`SheetCalibrator`、`SheetImagePreprocessor` 复用。
 
-### Template / TemplateProcessor
+### SheetCalibrator / RegistrationMarkDetector / CoordinateTransform
 
-`Template` 是 record，包含模板图片、`AnswerSheet` 布局、大框矩形、主观题区域等。
+`SheetCalibrator` 负责答卷坐标校准流程：读取模板二值图、检测模板与答卷定位黑块、生成坐标变换、将 `SheetLayout` 中的题目区域映射到当前答卷。
 
-`TemplateProcessor` 负责 `.sg` 文件的序列化（ZIP 格式）：
+`RegistrationMarkDetector` 只负责从二值图中筛选定位黑块并返回边界；`CoordinateTransform` 位于 `exam.geometry`，负责把模板坐标按定位标记边界映射到答卷坐标。
+
+### AnswerRegionBuilder
+
+根据 `TemplateLayoutDetector` 推断出的参数（起始坐标、间距、行列结构、选项数），为每道题生成 `List<Rect>` 选项区域，构建完整的 `SheetLayout`。
+
+### SheetTemplate / SheetTemplateFileStore
+
+`SheetTemplate` 是 record，包含模板图片、`SheetLayout` 布局、大框矩形、主观题区域等。
+
+`SheetTemplateFileStore` 负责 `.sg` 文件的序列化（ZIP 格式）：
 - `save()` → 写 `template.bin`（Java 序列化）+ `image/` 下的多页图片
-- `load()` → 反序列化还原为 `Template`
+- `load()` → 反序列化还原为 `SheetTemplate`
+
+序列化使用内部 DTO 类：`TemplateSnapshot`、`SheetLayoutSnapshot`、`SheetQuestionSnapshot`、`SubjectiveRegionSnapshot`、`RectSnapshot`，均标注 `serialVersionUID = 1L`。
 
 模板格式版本演进：v1（单页）→ v3（多页图片支持）。旧版本兼容读取。
 
-### Project（项目持久化）
+### GradingProject（项目持久化）
 
 项目状态通过 `.properties` 文件持久化，包含：
 - 模板路径、答卷目录
@@ -168,10 +211,10 @@ PDF/图片
 - 人工评分（`putManualScore`）
 - 学生姓名映射
 
-### 主观题区域（SubjectiveRegion）
+### SubjectiveAnswerRegion（主观题区域）
 
 支持三种模式：
-- `OCR` — 调用 OCR 服务（BaiduOcrRecognizer / GoogleVisionOcrRecognizer）
+- `OCR` — 调用 OCR 服务（`BaiduHandwritingOcr` / `GoogleVisionHandwritingOcr`）
 - `MANUAL` — 人工在界面上输入评分
 - `MIXED` — 先 OCR 后人工确认
 
@@ -206,13 +249,17 @@ PDF/图片
 
 ## 六、已知问题
 
-### 6.1 气泡检测噪声
+### 6.1 气泡检测噪声[历史问题，已解决]
 
 `detectAllRectanglesByThreshold()` 会把答题卡上的非气泡图形（如填充分隔线、字符边缘等）误检为气泡，导致行内 X 坐标出现额外噪声。这会干扰行聚类与列检测。
 
-当前 `res/AnswerSheets.pdf` 模板检测结果为 35 题（应为 40），差距约 5 题。主要原因为：
-- 模板第 1 大行包含 5 列正确检出（361、815、1266、1287、1726）
-- 第 2~3 大行的列检测不完全，经首行参考过滤后仅保留首列（361）
+当前 `res/AnswerSheets.pdf` 模板检测结果已恢复为 50 题：
+
+```text
+choiceQuestions=50
+choiceColsPerRow=[4, 4, 2]
+choiceQuestionsPerCol=[5, 5, 5, 5, 5, 5, 5, 5, 5, 5]
+```
 
 ### 6.2 三选项列与四选项列交织
 
@@ -235,16 +282,11 @@ PDF/图片
 
 ## 七、后续计划
 
-### 紧急
-
-1. **补上 5 题差距** — 当前第 1 大行正确（5 列×5 题=25 题），第 2~3 行仅各保留 1 列（共 10 题）。差距来自后续行未检出的三选项列，可通过以下方向解决：
-   - 提高后续行中列的检测质量（更好的 X 坐标聚类或容差调整）
-   - 不用首行参考过滤，改用基于选项数一致性的列过滤
-
 ### 短期
 
+1. **继续拆分图像处理职责** — `SheetImagePreprocessor` 仍包含读取、灰度化、二值化、纸张透视校正和空心方块填充，可优先抽 `SheetDeskewer`
 2. **支持每列独立选项数** — 将 `choiceOptionCount` 从模板级改为列级数组，使混合 3/4 选项模板各列正确生成选项区域
-3. **列合并容差动态化** — 将 `inferChoiceColumns()` 中硬编码的 20px 合并阈值改为基于 `optionGap` 的动态值
+3. **列合并容差动态化** — 将列合并阈值改为基于 `optionGap` 的动态值
 4. **验证最终效果** — 在 IDE 中完整走通"新建模板 → 创建项目 → 阅卷 → 出分"全流程，确认 `res/AnswerSheets.pdf` 模板可用
 
 ### 中长期

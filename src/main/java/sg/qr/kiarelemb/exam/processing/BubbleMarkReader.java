@@ -1,7 +1,6 @@
 package sg.qr.kiarelemb.exam.processing;
 
 import method.qr.kiarelemb.utils.QRLoggerUtils;
-import org.bytedeco.opencv.global.opencv_core;
 import org.bytedeco.opencv.opencv_core.Mat;
 import org.bytedeco.opencv.opencv_core.Rect;
 
@@ -43,23 +42,7 @@ public class BubbleMarkReader {
 	 * @return true 表示该选项已填涂
 	 */
 	public boolean isBubbleFilled(Mat binary, Rect region) {
-		// 边界裁剪，防止越界
-		int x = Math.max(0, region.x());
-		int y = Math.max(0, region.y());
-		int w = Math.min(region.width(), binary.cols() - x);
-		int h = Math.min(region.height(), binary.rows() - y);
-
-		if (w <= 0 || h <= 0) {
-			return false;
-		}
-
-		Mat roi = binary.apply(new Rect(x, y, w, h));
-		int totalPixels = w * h;
-		int whitePixels = opencv_core.countNonZero(roi);
-
-		// 白色像素占比超过阈值视为已填涂
-		double ratio = (double) whitePixels / totalPixels;
-		return ratio >= fillThreshold;
+		return BinaryRegionAnalyzer.whiteRatio(binary, region) >= fillThreshold;
 	}
 
 	/**
@@ -67,33 +50,8 @@ public class BubbleMarkReader {
 	 * @return 白色像素占比 (0.0 ~ 1.0)
 	 */
 	public double getFillRatio(Mat binary, Rect region) {
-		double bestRatio = 0;
-		for (int dy = -LOCAL_SEARCH_RADIUS_Y; dy <= LOCAL_SEARCH_RADIUS_Y; dy += LOCAL_SEARCH_STEP) {
-			for (int dx = -LOCAL_SEARCH_RADIUS_X; dx <= LOCAL_SEARCH_RADIUS_X; dx += LOCAL_SEARCH_STEP) {
-				bestRatio = Math.max(bestRatio, getFillRatioAt(binary, shifted(region, dx, dy)));
-			}
-		}
-		return bestRatio;
-	}
-
-	private double getFillRatioAt(Mat binary, Rect region) {
-		int x = Math.max(0, region.x());
-		int y = Math.max(0, region.y());
-		int w = Math.min(region.width(), binary.cols() - x);
-		int h = Math.min(region.height(), binary.rows() - y);
-
-		if (w <= 0 || h <= 0) {
-			return 0;
-		}
-
-		Mat roi = binary.apply(new Rect(x, y, w, h));
-		int totalPixels = w * h;
-		int whitePixels = opencv_core.countNonZero(roi);
-		return (double) whitePixels / totalPixels;
-	}
-
-	private Rect shifted(Rect rect, int dx, int dy) {
-		return new Rect(rect.x() + dx, rect.y() + dy, rect.width(), rect.height());
+		return BinaryRegionAnalyzer.bestWhiteRatioNear(binary, region,
+				LOCAL_SEARCH_RADIUS_X, LOCAL_SEARCH_RADIUS_Y, LOCAL_SEARCH_STEP);
 	}
 
 	/**

@@ -1,12 +1,9 @@
 package sg.qr.kiarelemb.exam.processing;
 
 import method.qr.kiarelemb.utils.QRLoggerUtils;
-import org.bytedeco.opencv.global.opencv_core;
-import org.bytedeco.opencv.global.opencv_imgproc;
 import org.bytedeco.opencv.opencv_core.Mat;
-import org.bytedeco.opencv.opencv_core.MatVector;
-import org.bytedeco.opencv.opencv_core.Point;
 import org.bytedeco.opencv.opencv_core.Rect;
+import sg.qr.kiarelemb.exam.geometry.CoordinateTransform;
 import sg.qr.kiarelemb.exam.model.SheetLayout;
 import sg.qr.kiarelemb.exam.model.SheetQuestion;
 import sg.qr.kiarelemb.exam.model.SheetTemplate;
@@ -17,7 +14,6 @@ import java.util.logging.Logger;
 
 public final class SheetCalibrator {
 	private static final Logger logger = QRLoggerUtils.getLogger(SheetCalibrator.class);
-	private static final int MIN_MARKS = 8;
 	private static String cachedTemplatePath;
 	private static Mat cachedTemplateBinary;
 
@@ -31,8 +27,8 @@ public final class SheetCalibrator {
 
 		try {
 			Mat templateBinary = templateBinary(template);
-			MarkBounds templateBounds = detectMarkBounds(templateBinary);
-			MarkBounds answerBounds = detectMarkBounds(answerBinary);
+			RegistrationMarkDetector.MarkBounds templateBounds = RegistrationMarkDetector.detectMarkBounds(templateBinary);
+			RegistrationMarkDetector.MarkBounds answerBounds = RegistrationMarkDetector.detectMarkBounds(answerBinary);
 			if (templateBounds == null || answerBounds == null) {
 				logger.warning("答卷校准失败：定位黑块不足，使用模板原始坐标。");
 				return CalibrationResult.uncalibrated(source, template);
@@ -45,11 +41,11 @@ public final class SheetCalibrator {
 					(double) templateBinary.rows() / source.getImageHeight());
 
 			SheetLayout calibrated = transformAnswerSheet(source, transform, answerBinary, answerBinary.cols(), answerBinary.rows());
-			logger.info("答卷校准完成：scaleX=" + String.format("%.5f", transform.scaleX)
-						+ ", scaleY=" + String.format("%.5f", transform.scaleY)
-						+ ", offsetX=" + String.format("%.1f", transform.offsetX)
-						+ ", offsetY=" + String.format("%.1f", transform.offsetY)
-						+ ", marks=" + answerBounds.count);
+			logger.info("答卷校准完成：scaleX=" + String.format("%.5f", transform.scaleX())
+						+ ", scaleY=" + String.format("%.5f", transform.scaleY())
+						+ ", offsetX=" + String.format("%.1f", transform.offsetX())
+						+ ", offsetY=" + String.format("%.1f", transform.offsetY())
+						+ ", marks=" + answerBounds.count());
 			return new CalibrationResult(
 					calibrated,
 					transform.transform(template.examRegionRect()),
@@ -79,7 +75,7 @@ public final class SheetCalibrator {
 		for (SheetQuestion question : source.getQuestions()) {
 			List<Rect> regions = new ArrayList<>();
 			for (Rect rect : question.optionRegions()) {
-				regions.add(clamp(transform.transform(rect), imgW, imgH));
+				regions.add(BinaryRegionAnalyzer.clamp(transform.transform(rect), imgW, imgH));
 			}
 			questions.add(new SheetQuestion(question.number(), question.type(), regions, question.correctAnswer()));
 		}
@@ -178,7 +174,7 @@ public final class SheetCalibrator {
 				lastNumber = Math.max(lastNumber, question.number());
 				List<Rect> shifted = new ArrayList<>();
 				for (Rect rect : question.optionRegions()) {
-					shifted.add(clamp(new Rect(rect.x(), rect.y() + bestOffset, rect.width(), rect.height()), imgW, imgH));
+					shifted.add(BinaryRegionAnalyzer.clamp(new Rect(rect.x(), rect.y() + bestOffset, rect.width(), rect.height()), imgW, imgH));
 				}
 				questions.set(index, new SheetQuestion(question.number(), question.type(), shifted, question.correctAnswer()));
 			}
@@ -228,7 +224,7 @@ public final class SheetCalibrator {
 			SheetQuestion question = questions.get(index);
 			List<Rect> shifted = new ArrayList<>();
 			for (Rect rect : question.optionRegions()) {
-				shifted.add(clamp(new Rect(rect.x(), rect.y() + bestOffset, rect.width(), rect.height()), imgW, imgH));
+				shifted.add(BinaryRegionAnalyzer.clamp(new Rect(rect.x(), rect.y() + bestOffset, rect.width(), rect.height()), imgW, imgH));
 			}
 			questions.set(index, new SheetQuestion(question.number(), question.type(), shifted, question.correctAnswer()));
 		}
@@ -249,7 +245,8 @@ public final class SheetCalibrator {
 	private static double rowStructureScore(Mat binary, List<Rect> optionRects, int yOffset) {
 		double total = 0;
 		for (Rect rect : optionRects) {
-			total += fillRatio(binary, inflate(new Rect(rect.x(), rect.y() + yOffset, rect.width(), rect.height()), 3));
+			total += BinaryRegionAnalyzer.whiteRatio(binary,
+					BinaryRegionAnalyzer.inflate(new Rect(rect.x(), rect.y() + yOffset, rect.width(), rect.height()), 3));
 		}
 		return total / optionRects.size();
 	}
@@ -274,101 +271,10 @@ public final class SheetCalibrator {
 	private static double rowScore(Mat binary, List<Rect> optionRects, int yOffset) {
 		double best = 0;
 		for (Rect rect : optionRects) {
-			best = Math.max(best, fillRatio(binary, inflate(new Rect(rect.x(), rect.y() + yOffset, rect.width(), rect.height()), 3)));
+			best = Math.max(best, BinaryRegionAnalyzer.whiteRatio(binary,
+					BinaryRegionAnalyzer.inflate(new Rect(rect.x(), rect.y() + yOffset, rect.width(), rect.height()), 3)));
 		}
 		return best;
-	}
-
-	private static double fillRatio(Mat binary, Rect rect) {
-		int x = Math.max(0, rect.x());
-		int y = Math.max(0, rect.y());
-		int w = Math.min(rect.width(), binary.cols() - x);
-		int h = Math.min(rect.height(), binary.rows() - y);
-		if (w <= 0 || h <= 0) {
-			return 0;
-		}
-		Mat roi = binary.apply(new Rect(x, y, w, h));
-		try {
-			return (double) opencv_core.countNonZero(roi) / (w * h);
-		} finally {
-			roi.release();
-		}
-	}
-
-	private static Rect inflate(Rect rect, int padding) {
-		return new Rect(rect.x() - padding, rect.y() - padding,
-				rect.width() + padding * 2, rect.height() + padding * 2);
-	}
-
-	private static MarkBounds detectMarkBounds(Mat binary) {
-		MatVector contours = new MatVector();
-		Mat hierarchy = new Mat();
-		Mat work = binary.clone();
-		List<Point> centers = new ArrayList<>();
-		try {
-			opencv_imgproc.findContours(work, contours, hierarchy,
-					opencv_imgproc.RETR_EXTERNAL, opencv_imgproc.CHAIN_APPROX_SIMPLE);
-
-			double imgArea = (double) binary.cols() * binary.rows();
-			for (int i = 0; i < contours.size(); i++) {
-				Mat contour = contours.get(i);
-				Rect bbox = opencv_imgproc.boundingRect(contour);
-				if (isRegistrationMark(binary, bbox, imgArea)) {
-					centers.add(new Point(bbox.x() + bbox.width() / 2, bbox.y() + bbox.height() / 2));
-				}
-				contour.release();
-			}
-		} finally {
-			work.release();
-			hierarchy.release();
-			contours.releaseReference();
-		}
-
-		if (centers.size() < MIN_MARKS) {
-			logger.warning("定位黑块数量不足：" + centers.size());
-			return null;
-		}
-		return MarkBounds.from(centers);
-	}
-
-	private static boolean isRegistrationMark(Mat binary, Rect bbox, double imgArea) {
-		int area = bbox.width() * bbox.height();
-		if (area < imgArea * 0.00025 || area > imgArea * 0.006) {
-			return false;
-		}
-		double aspect = (double) bbox.width() / bbox.height();
-		if (aspect < 1.15 || aspect > 2.6) {
-			return false;
-		}
-
-		int cx = bbox.x() + bbox.width() / 2;
-		int cy = bbox.y() + bbox.height() / 2;
-		boolean nearEdge = cx < binary.cols() * 0.16
-						   || cx > binary.cols() * 0.84
-						   || cy < binary.rows() * 0.08
-						   || cy > binary.rows() * 0.93;
-		if (!nearEdge) {
-			return false;
-		}
-
-		Mat roi = binary.apply(bbox);
-		try {
-			double fillRatio = (double) opencv_core.countNonZero(roi) / area;
-			return fillRatio > 0.65;
-		} finally {
-			roi.release();
-		}
-	}
-
-	private static Rect clamp(Rect rect, int imgW, int imgH) {
-		if (rect == null) {
-			return null;
-		}
-		int x = Math.max(0, Math.min(rect.x(), imgW - 1));
-		int y = Math.max(0, Math.min(rect.y(), imgH - 1));
-		int right = Math.max(x + 1, Math.min(rect.x() + rect.width(), imgW));
-		int bottom = Math.max(y + 1, Math.min(rect.y() + rect.height(), imgH));
-		return new Rect(x, y, right - x, bottom - y);
 	}
 
 	public record CalibrationResult(SheetLayout answerSheet, Rect examRegionRect, Rect choiceRegionRect,
@@ -380,76 +286,6 @@ public final class SheetCalibrator {
 					template == null ? null : copy(template.choiceRegionRect()),
 					template == null ? null : copy(template.fillBlankRegionRect()),
 					false);
-		}
-	}
-
-	private record MarkBounds(double minX, double minY, double maxX, double maxY, int count) {
-		private static MarkBounds from(List<Point> centers) {
-			double minX = Double.MAX_VALUE;
-			double minY = Double.MAX_VALUE;
-			double maxX = -Double.MAX_VALUE;
-			double maxY = -Double.MAX_VALUE;
-			for (Point point : centers) {
-				minX = Math.min(minX, point.x());
-				minY = Math.min(minY, point.y());
-				maxX = Math.max(maxX, point.x());
-				maxY = Math.max(maxY, point.y());
-			}
-			if (maxX <= minX || maxY <= minY) {
-				return null;
-			}
-			return new MarkBounds(minX, minY, maxX, maxY, centers.size());
-		}
-	}
-
-	private static final class CoordinateTransform {
-		private final double sourceScaleX;
-		private final double sourceScaleY;
-		private final double scaleX;
-		private final double scaleY;
-		private final double offsetX;
-		private final double offsetY;
-
-		private CoordinateTransform(double sourceScaleX, double sourceScaleY,
-									double scaleX, double scaleY, double offsetX, double offsetY) {
-			this.sourceScaleX = sourceScaleX;
-			this.sourceScaleY = sourceScaleY;
-			this.scaleX = scaleX;
-			this.scaleY = scaleY;
-			this.offsetX = offsetX;
-			this.offsetY = offsetY;
-		}
-
-		private static CoordinateTransform from(MarkBounds source, MarkBounds target,
-												double sourceScaleX, double sourceScaleY) {
-			double scaleX = (target.maxX - target.minX) / (source.maxX - source.minX);
-			double scaleY = (target.maxY - target.minY) / (source.maxY - source.minY);
-			double offsetX = target.minX - source.minX * scaleX;
-			double offsetY = target.minY - source.minY * scaleY;
-			return new CoordinateTransform(sourceScaleX, sourceScaleY, scaleX, scaleY, offsetX, offsetY);
-		}
-
-		private Rect transform(Rect rect) {
-			if (rect == null) {
-				return null;
-			}
-			double x1 = transformX(rect.x());
-			double y1 = transformY(rect.y());
-			double x2 = transformX(rect.x() + rect.width());
-			double y2 = transformY(rect.y() + rect.height());
-			int x = (int) Math.round(Math.min(x1, x2));
-			int y = (int) Math.round(Math.min(y1, y2));
-			int w = Math.max(1, (int) Math.round(Math.abs(x2 - x1)));
-			int h = Math.max(1, (int) Math.round(Math.abs(y2 - y1)));
-			return new Rect(x, y, w, h);
-		}
-
-		private double transformX(int x) {
-			return x * sourceScaleX * scaleX + offsetX;
-		}
-
-		private double transformY(int y) {
-			return y * sourceScaleY * scaleY + offsetY;
 		}
 	}
 

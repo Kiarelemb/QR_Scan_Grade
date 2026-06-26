@@ -1,7 +1,6 @@
 package sg.qr.kiarelemb.exam.processing;
 import method.qr.kiarelemb.utils.QRLoggerUtils;
 import java.util.logging.Logger;
-import org.bytedeco.opencv.global.opencv_core;
 import org.bytedeco.opencv.opencv_core.Mat;
 import org.bytedeco.opencv.opencv_core.Rect;
 import sg.qr.kiarelemb.exam.model.SheetLayout;
@@ -23,31 +22,6 @@ public class ObjectiveAnswerGrader {
 
 	public ObjectiveAnswerGrader(BubbleMarkReader bubbleMarkReader) {
 		this.bubbleMarkReader = bubbleMarkReader;
-	}
-
-	/**
-	 * 计算矩形区域内的白色像素占比
-	 */
-	private static double getWhitePixelRatio(Mat binary, org.bytedeco.opencv.opencv_core.Rect rect) {
-		// 边界检查：确保ROI不超出图像范围
-		int imgW = binary.cols();
-		int imgH = binary.rows();
-
-		int x = Math.max(0, rect.x());
-		int y = Math.max(0, rect.y());
-		int w = Math.min(rect.width(), imgW - x);
-		int h = Math.min(rect.height(), imgH - y);
-
-		// 如果裁剪后无效，返回0
-		if (w <= 0 || h <= 0) {
-			return 0.0;
-		}
-
-		// 提取ROI区域
-		Mat roi = new Mat(binary, new org.bytedeco.opencv.opencv_core.Rect(x, y, w, h));
-		double totalPixels = w * h;
-		double whitePixels = opencv_core.countNonZero(roi);
-		return whitePixels / totalPixels;
 	}
 
 	/**

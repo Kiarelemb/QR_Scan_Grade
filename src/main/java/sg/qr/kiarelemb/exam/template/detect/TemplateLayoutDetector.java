@@ -6,6 +6,7 @@ import org.bytedeco.opencv.global.opencv_imgcodecs;
 import org.bytedeco.opencv.global.opencv_imgproc;
 import org.bytedeco.opencv.opencv_core.*;
 import sg.qr.kiarelemb.data.Utils;
+import sg.qr.kiarelemb.exam.geometry.SheetGeometryUtils;
 import sg.qr.kiarelemb.exam.model.SheetLayout;
 import sg.qr.kiarelemb.exam.processing.AnswerRegionBuilder;
 
@@ -245,7 +246,7 @@ public class TemplateLayoutDetector {
 
 		// 按 Y 坐标聚类（容差15px）
 		int[] yValues = choiceRects.stream().mapToInt(r -> r.cy).sorted().toArray();
-		List<Integer> yClusters = TemplateLayoutDetectorUtils.clusterValues(yValues, 15);
+		List<Integer> yClusters = SheetGeometryUtils.clusterValues(yValues, 15);
 
 		// 构建 rowGroups 和 rowRectGroups（key = 聚类后的代表Y值）
 		Map<Integer, List<Integer>> rowGroups = new LinkedHashMap<>();
@@ -266,10 +267,10 @@ public class TemplateLayoutDetector {
 		for (int rowKey : sortedRows) {
 			List<Integer> xCoords = rowGroups.get(rowKey);
 			if (xCoords.size() >= 3) {
-				List<Integer> normalizedXCoords = TemplateLayoutDetectorUtils.clusterValues(xCoords.stream().mapToInt(Integer::intValue).toArray(), 20);
-				List<Integer> colStarts = TemplateLayoutDetectorUtils.choiceColumnStarts(normalizedXCoords, bubbleW);
+				List<Integer> normalizedXCoords = SheetGeometryUtils.clusterValues(xCoords.stream().mapToInt(Integer::intValue).toArray(), 20);
+				List<Integer> colStarts = ChoiceLayoutAnalyzer.choiceColumnStarts(normalizedXCoords, bubbleW);
 				if (colStarts.size() >= 2) {
-					int optionGap = TemplateLayoutDetectorUtils.inferOptionGap(normalizedXCoords);
+					int optionGap = ChoiceLayoutAnalyzer.inferOptionGap(normalizedXCoords);
 					this.choiceStartX = colStarts.get(0);
 					this.choiceStartY = rowKey - bubbleH / 2;
 					this.choiceHGap = optionGap;
@@ -325,11 +326,11 @@ public class TemplateLayoutDetector {
 			if (xCoords == null || xCoords.size() < 3) continue;
 
 			Collections.sort(xCoords);
-			xCoords = TemplateLayoutDetectorUtils.clusterValues(xCoords.stream().mapToInt(Integer::intValue).toArray(), 20);
-			List<int[]> choiceGroups = TemplateLayoutDetectorUtils.choiceColumnGroups(xCoords, bubbleW);
+			xCoords = SheetGeometryUtils.clusterValues(xCoords.stream().mapToInt(Integer::intValue).toArray(), 20);
+			List<int[]> choiceGroups = ChoiceLayoutAnalyzer.choiceColumnGroups(xCoords, bubbleW);
 			List<Integer> colStarts = new ArrayList<>();
 			List<Integer> optionCounts = new ArrayList<>();
-			int optionGap = TemplateLayoutDetectorUtils.inferOptionGap(xCoords);
+			int optionGap = ChoiceLayoutAnalyzer.inferOptionGap(xCoords);
 			if (this.choiceHGap <= 0 && optionGap > 0) {
 				this.choiceHGap = optionGap;
 			}
@@ -343,7 +344,7 @@ public class TemplateLayoutDetector {
 			}
 		}
 		if (!detectedOptionCounts.isEmpty()) {
-			this.choiceOptionCount = TemplateLayoutDetectorUtils.dominantCount(detectedOptionCounts);
+			this.choiceOptionCount = SheetGeometryUtils.dominantCount(detectedOptionCounts);
 		}
 
 		if (rowInfos.isEmpty()) {
@@ -425,7 +426,7 @@ public class TemplateLayoutDetector {
 					}
 				}
 				if (!referenceColXs.isEmpty() && validColXs.size() > referenceColXs.size()) {
-					List<Integer> keepIndexes = TemplateLayoutDetectorUtils.closestColumnIndexes(validColXs, referenceColXs);
+					List<Integer> keepIndexes = SheetGeometryUtils.closestColumnIndexes(validColXs, referenceColXs);
 					List<Integer> filteredColXs = new ArrayList<>();
 					List<Integer> filteredCounts = new ArrayList<>();
 					for (int index : keepIndexes) {
@@ -788,7 +789,7 @@ public class TemplateLayoutDetector {
 			if (keptCounts.isEmpty()) {
 				continue;
 			}
-			int normalizedCount = TemplateLayoutDetectorUtils.dominantCount(keptCounts);
+			int normalizedCount = SheetGeometryUtils.dominantCount(keptCounts);
 			rowStarts.add(rowY);
 			colsPerRow.add(keptCounts.size());
 			for (int i = 0; i < keptCounts.size(); i++) {

@@ -2,11 +2,11 @@ package sg.qr.kiarelemb.test;
 
 import method.qr.kiarelemb.utils.QRRandomUtils;
 import org.bytedeco.opencv.opencv_core.Rect;
-import sg.qr.kiarelemb.grading.layout.LayoutDetector;
-import sg.qr.kiarelemb.grading.model.AnswerSheet;
-import sg.qr.kiarelemb.grading.model.Question;
-import sg.qr.kiarelemb.grading.model.Template;
-import sg.qr.kiarelemb.grading.pipeline.TemplateProcessor;
+import sg.qr.kiarelemb.exam.template.detect.TemplateLayoutDetector;
+import sg.qr.kiarelemb.exam.model.SheetLayout;
+import sg.qr.kiarelemb.exam.model.SheetQuestion;
+import sg.qr.kiarelemb.exam.model.SheetTemplate;
+import sg.qr.kiarelemb.exam.processing.SheetTemplateFileStore;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
@@ -26,15 +26,15 @@ public final class AnswerSheetTestGenerator {
 	private static final int IMAGE_HEIGHT = 3507;
 
 	public static void main(String[] args) throws Exception {
-		Template template = TemplateProcessor.load(new File("F:\\IdeaProjects\\QR_Scan_Grade\\sg\\小测答题卡.sg"));
+		SheetTemplate template = SheetTemplateFileStore.load(new File("F:\\IdeaProjects\\QR_Scan_Grade\\sg\\小测答题卡.sg"));
 		generate(template, new File("F:\\ans"), "answer_sheet_");
 	}
 
-	public static void generate(Template template, File outputDirectory, String filePrefix) throws IOException {
+	public static void generate(SheetTemplate template, File outputDirectory, String filePrefix) throws IOException {
 		generate(template, outputDirectory, filePrefix, DEFAULT_START_ID, DEFAULT_END_ID);
 	}
 
-	public static void generate(Template template, File outputDirectory, String filePrefix, int startExamId, int endExamId) throws IOException {
+	public static void generate(SheetTemplate template, File outputDirectory, String filePrefix, int startExamId, int endExamId) throws IOException {
 		if (template == null) {
 			throw new IllegalArgumentException("template must not be null");
 		}
@@ -61,12 +61,12 @@ public final class AnswerSheetTestGenerator {
 		}
 	}
 
-	public static Template buildTemplate(LayoutDetector detector, File templateImage) {
-		AnswerSheet answerSheet = detector.buildAnswerSheet(IMAGE_WIDTH, IMAGE_HEIGHT, templateImage.getName(), new String[detector.choiceQuestionsPerCol == null ? 0 : countChoices(detector)]);
-		return new Template(templateImage.getName(), templateImage, answerSheet);
+	public static SheetTemplate buildTemplate(TemplateLayoutDetector detector, File templateImage) {
+		SheetLayout answerSheet = detector.buildAnswerSheet(IMAGE_WIDTH, IMAGE_HEIGHT, templateImage.getName(), new String[detector.choiceQuestionsPerCol == null ? 0 : countChoices(detector)]);
+		return new SheetTemplate(templateImage.getName(), templateImage, answerSheet);
 	}
 
-	private static int countChoices(LayoutDetector detector) {
+	private static int countChoices(TemplateLayoutDetector detector) {
 		int total = 0;
 		if (detector.choiceQuestionsPerCol != null) {
 			for (int count : detector.choiceQuestionsPerCol) {
@@ -76,7 +76,7 @@ public final class AnswerSheetTestGenerator {
 		return total;
 	}
 
-	private static void fillAnswerSheet(BufferedImage image, AnswerSheet answerSheet, String examId, List<String> answers) {
+	private static void fillAnswerSheet(BufferedImage image, SheetLayout answerSheet, String examId, List<String> answers) {
 		Graphics2D graphics = image.createGraphics();
 		try {
 			graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -95,22 +95,22 @@ public final class AnswerSheetTestGenerator {
 		graphics.setColor(new Color(180, 120, 0));
 	}
 
-	private static void drawExamId(Graphics2D graphics, AnswerSheet answerSheet, String examId) {
-		List<Question> questions = answerSheet.getExamIdQuestions();
+	private static void drawExamId(Graphics2D graphics, SheetLayout answerSheet, String examId) {
+		List<SheetQuestion> questions = answerSheet.getExamIdQuestions();
 		int digitCount = Math.min(examId.length(), questions.size());
 		for (int i = 0; i < digitCount; i++) {
 			markOption(graphics, questions.get(i), String.valueOf(examId.charAt(examId.length() - digitCount + i)));
 		}
 	}
 
-	private static void drawChoices(Graphics2D graphics, AnswerSheet answerSheet, List<String> answers) {
-		List<Question> questions = answerSheet.getChoiceQuestions();
+	private static void drawChoices(Graphics2D graphics, SheetLayout answerSheet, List<String> answers) {
+		List<SheetQuestion> questions = answerSheet.getChoiceQuestions();
 		for (int i = 0; i < Math.min(questions.size(), answers.size()); i++) {
 			markOption(graphics, questions.get(i), answers.get(i));
 		}
 	}
 
-	private static void markOption(Graphics2D graphics, Question question, String answer) {
+	private static void markOption(Graphics2D graphics, SheetQuestion question, String answer) {
 		List<Rect> regions = question.optionRegions();
 		if (regions == null || regions.isEmpty()) {
 			return;
@@ -124,7 +124,7 @@ public final class AnswerSheetTestGenerator {
 		graphics.fillRect(rect.x(), rect.y(), rect.width(), rect.height());
 	}
 
-	private static int optionIndex(Question question, String answer) {
+	private static int optionIndex(SheetQuestion question, String answer) {
 		String normalized = answer == null ? "" : answer.trim().toUpperCase(Locale.ROOT);
 		return switch (question.type()) {
 			case EXAM_ID -> "0123456789".indexOf(normalized);
@@ -133,7 +133,7 @@ public final class AnswerSheetTestGenerator {
 		};
 	}
 
-	private static List<String> randomAnswers(AnswerSheet answerSheet) {
+	private static List<String> randomAnswers(SheetLayout answerSheet) {
 		String[] choices = answerSheet.getChoiceLabels();
 		List<String> result = new ArrayList<>(answerSheet.getChoiceQuestions().size());
 		for (int i = 0; i < answerSheet.getChoiceQuestions().size(); i++) {

@@ -13,12 +13,12 @@ import java.io.File;
  * @description TODO
  * @create 2026/6/6 18:07
  */
-public class ContinueProjectBtn extends StartBtn {
-	public static final ContinueProjectBtn CONTINUE_PROJECT_BTN = new ContinueProjectBtn();
+public class ContinueProjectButton extends StartActionButton {
+	public static final ContinueProjectButton CONTINUE_PROJECT_BTN = new ContinueProjectButton();
 	private static final File PROJECT_DIR = new File("sgp");
 	private static final String PROJECT_EXTENSION = "sgp";
 
-	private ContinueProjectBtn() {
+	private ContinueProjectButton() {
 		super("继续批阅");
 		setToolTipText("继续上次的批阅项目。");
 	}

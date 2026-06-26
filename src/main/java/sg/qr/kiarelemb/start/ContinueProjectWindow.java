@@ -1,7 +1,7 @@
 package sg.qr.kiarelemb.start;
 
 import sg.qr.kiarelemb.MainWindow;
-import sg.qr.kiarelemb.grading.model.Project;
+import sg.qr.kiarelemb.exam.model.GradingProject;
 import swing.qr.kiarelemb.basic.QRList;
 import swing.qr.kiarelemb.basic.QRPanel;
 import swing.qr.kiarelemb.basic.QRRoundButton;
@@ -90,7 +90,7 @@ public class ContinueProjectWindow extends QRDialog {
 		Arrays.sort(files, Comparator.comparing(File::getName, String.CASE_INSENSITIVE_ORDER));
 		for (File file : files) {
 			try {
-				Project project = new Project(file);
+				GradingProject project = new GradingProject(file);
 				project.read();
 				projectList.addItem(new ProjectItem(project));
 			} catch (Exception ex) {
@@ -113,7 +113,7 @@ public class ContinueProjectWindow extends QRDialog {
 		MainWindow.INSTANCE.startProject(item.project());
 	}
 
-	private record ProjectItem(Project project) {
+	private record ProjectItem(GradingProject project) {
 		@Override
 		public String toString() {
 			return projectName() + "    " + progressText();

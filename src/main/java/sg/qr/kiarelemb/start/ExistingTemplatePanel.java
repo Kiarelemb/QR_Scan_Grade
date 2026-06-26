@@ -2,9 +2,9 @@ package sg.qr.kiarelemb.start;
 
 import sg.qr.kiarelemb.MainWindow;
 import sg.qr.kiarelemb.data.Keys;
-import sg.qr.kiarelemb.grading.NewProject;
-import sg.qr.kiarelemb.grading.model.Template;
-import sg.qr.kiarelemb.grading.pipeline.TemplateProcessor;
+import sg.qr.kiarelemb.exam.NewGradingProjectDialog;
+import sg.qr.kiarelemb.exam.model.SheetTemplate;
+import sg.qr.kiarelemb.exam.processing.SheetTemplateFileStore;
 import swing.qr.kiarelemb.QRSwing;
 import swing.qr.kiarelemb.basic.QRLabel;
 import swing.qr.kiarelemb.basic.QRPanel;
@@ -28,7 +28,7 @@ import java.nio.file.Files;
 import java.util.*;
 import java.util.List;
 
-public class ExistTmptPanel extends QRPanel {
+public class ExistingTemplatePanel extends QRPanel {
 	private static final File TEMPLATE_DIR = new File("sg");
 	private static final File ORDER_FILE = new File(TEMPLATE_DIR, ".template-order");
 	private static final Font INFO_FONT = QRColorsAndFonts.createFont(16);
@@ -44,7 +44,7 @@ public class ExistTmptPanel extends QRPanel {
 	private final QRRoundButton backButton = new QRRoundButton("\u8fd4\u56de");
 	private TemplateItem selectedItem;
 
-	public ExistTmptPanel() {
+	public ExistingTemplatePanel() {
 		initView();
 		loadTemplates();
 	}
@@ -93,11 +93,11 @@ public class ExistTmptPanel extends QRPanel {
 		templatePanel.removeAll();
 
 		File[] files = TEMPLATE_DIR.listFiles(file ->
-				file.isFile() && file.getName().toLowerCase().endsWith("." + TemplateProcessor.TEMPLATE_EXTENSION));
+				file.isFile() && file.getName().toLowerCase().endsWith("." + SheetTemplateFileStore.TEMPLATE_EXTENSION));
 
 		for (File file : sortTemplateFiles(files)) {
 			try {
-				Template template = TemplateProcessor.load(file);
+				SheetTemplate template = SheetTemplateFileStore.load(file);
 				TemplateItem item = new TemplateItem(file, template);
 				templateItems.add(item);
 				templatePanel.add(item.card);
@@ -165,14 +165,14 @@ public class ExistTmptPanel extends QRPanel {
 	private void selectTemplate(TemplateItem item) {
 		selectedItem = item;
 		refreshSelectedCards();
-		Template template = item.template;
+		SheetTemplate template = item.template;
 		summaryLabel.setText(template.name() + "，"
-							 + TmptDataSplitPane.buildShortSummary(template.answerSheet())
-							 + "，准考证号 " + template.answerSheet().getExamIdDigits() + " 位");
+		                     + TemplateAnalysisPane.buildShortSummary(template.answerSheet())
+		                     + "，准考证号 " + template.answerSheet().getExamIdDigits() + " 位");
 		updateEditButtons();
 	}
 
-	private void showTemplateDetail(Template template) {
+	private void showTemplateDetail(SheetTemplate template) {
 		new TemplateDetailWindow(template).setVisible(true);
 	}
 
@@ -277,15 +277,15 @@ public class ExistTmptPanel extends QRPanel {
 		}
 		File answerDirectory = fileSelect.selectedFile();
 		QRSwing.setGlobalSetting(Keys.SELECTED_FILE_DIRECTORY, answerDirectory.getAbsolutePath());
-		new NewProject(selectedItem.template, selectedItem.file, answerDirectory).setVisible(true);
+		new NewGradingProjectDialog(selectedItem.template, selectedItem.file, answerDirectory).setVisible(true);
 	}
 
 	private final class TemplateItem {
 		private final File file;
-		private final Template template;
+		private final SheetTemplate template;
 		private final TemplateCard card;
 
-		private TemplateItem(File file, Template template) {
+		private TemplateItem(File file, SheetTemplate template) {
 			this.file = file;
 			this.template = template;
 			this.card = new TemplateCard(this);
@@ -318,7 +318,7 @@ public class ExistTmptPanel extends QRPanel {
 	}
 
 	private static final class TemplateDetailWindow extends QRDialog {
-		private TemplateDetailWindow(Template template) {
+		private TemplateDetailWindow(SheetTemplate template) {
 			super(MainWindow.INSTANCE);
 			setTitle(template.name());
 			setTitlePlace(CENTER);
@@ -326,7 +326,7 @@ public class ExistTmptPanel extends QRPanel {
 			setLocationRelativeTo(MainWindow.INSTANCE);
 			setParentWindowNotFollowMove();
 			mainPanel.setLayout(new BorderLayout());
-			mainPanel.add(new TmptDataSplitPane(template), BorderLayout.CENTER);
+			mainPanel.add(new TemplateAnalysisPane(template), BorderLayout.CENTER);
 		}
 	}
 }

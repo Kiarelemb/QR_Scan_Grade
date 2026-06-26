@@ -1,9 +1,9 @@
 package sg.qr.kiarelemb.component;
 
 import org.bytedeco.opencv.opencv_core.Rect;
-import sg.qr.kiarelemb.grading.model.AnswerSheet;
-import sg.qr.kiarelemb.grading.model.Question;
-import sg.qr.kiarelemb.grading.model.Template;
+import sg.qr.kiarelemb.exam.model.SheetLayout;
+import sg.qr.kiarelemb.exam.model.SheetQuestion;
+import sg.qr.kiarelemb.exam.model.SheetTemplate;
 import swing.qr.kiarelemb.theme.QRColorsAndFonts;
 import swing.qr.kiarelemb.utils.PicturePanel;
 
@@ -21,7 +21,7 @@ public class AnswerSheetPreviewPanel extends PicturePanel {
 	private final Color examColor;
 	private final Color choiceColor;
 	private final Color fillColor;
-	private Template template;
+	private SheetTemplate template;
 	private boolean colorInverted;
 	private int pageIndex;
 
@@ -37,11 +37,11 @@ public class AnswerSheetPreviewPanel extends PicturePanel {
 		setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
 	}
 
-	public void setData(BufferedImage image, Template template) {
+	public void setData(BufferedImage image, SheetTemplate template) {
 		setData(image, template, true);
 	}
 
-	public void setData(BufferedImage image, Template template, boolean resetView) {
+	public void setData(BufferedImage image, SheetTemplate template, boolean resetView) {
 		this.image = image;
 		this.pictureSize = image == null ? null : new Dimension(image.getWidth(), image.getHeight());
 		this.template = template;
@@ -116,7 +116,7 @@ public class AnswerSheetPreviewPanel extends PicturePanel {
 		int baseW = image.getWidth();
 		int baseH = image.getHeight();
 		if (template != null) {
-			AnswerSheet sheet = template.answerSheet();
+			SheetLayout sheet = template.answerSheet();
 			if (sheet.getImageWidth() > 0 && sheet.getImageHeight() > 0) {
 				baseW = sheet.getImageWidth();
 				baseH = sheet.getImageHeight();
@@ -175,7 +175,7 @@ public class AnswerSheetPreviewPanel extends PicturePanel {
 			drawTemplateRegion(g2, box, template.examRegionRect(), examColor, "准考证号");
 			drawTemplateRegion(g2, box, template.choiceRegionRect(), choiceColor, "选择题");
 		}
-		for (sg.qr.kiarelemb.grading.model.SubjectiveRegion region : template.subjectiveRegions()) {
+		for (sg.qr.kiarelemb.exam.model.SubjectiveAnswerRegion region : template.subjectiveRegions()) {
 			if (region.pageIndex() == pageIndex) {
 				drawTemplateRegion(g2, box, region.region(), fillColor, region.name());
 			}
@@ -219,13 +219,13 @@ public class AnswerSheetPreviewPanel extends PicturePanel {
 		return null;
 	}
 
-	protected Rect groupBounds(List<Question> questions) {
+	protected Rect groupBounds(List<SheetQuestion> questions) {
 		if (questions == null || questions.isEmpty()) return null;
 		int minX = Integer.MAX_VALUE;
 		int minY = Integer.MAX_VALUE;
 		int maxX = Integer.MIN_VALUE;
 		int maxY = Integer.MIN_VALUE;
-		for (Question question : questions) {
+		for (SheetQuestion question : questions) {
 			for (Rect rect : question.optionRegions()) {
 				minX = Math.min(minX, rect.x());
 				minY = Math.min(minY, rect.y());

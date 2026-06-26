@@ -17,8 +17,8 @@ public class StartPanel extends QRPanel {
 
 	private StartPanel() {
 		setLayout(new FlowLayout(FlowLayout.CENTER, 20, 20));
-		add(NewTemplateBtn.NEW_TEMPLATE_BTN);
-		add(ContinueProjectBtn.CONTINUE_PROJECT_BTN);
-		add(ExistTemplateBtn.EXIST_TEMPLATE_BTN);
+		add(NewTemplateButton.NEW_TEMPLATE_BTN);
+		add(ContinueProjectButton.CONTINUE_PROJECT_BTN);
+		add(ExistingTemplateButton.EXIST_TEMPLATE_BTN);
 	}
 }

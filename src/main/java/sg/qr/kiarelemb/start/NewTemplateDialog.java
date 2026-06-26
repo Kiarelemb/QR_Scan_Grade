@@ -3,12 +3,12 @@ package sg.qr.kiarelemb.start;
 import method.qr.kiarelemb.utils.QRFileUtils;
 import org.bytedeco.opencv.opencv_core.Rect;
 import sg.qr.kiarelemb.MainWindow;
-import sg.qr.kiarelemb.grading.layout.DetectedRect;
-import sg.qr.kiarelemb.grading.layout.LayoutDetector;
-import sg.qr.kiarelemb.grading.model.AnswerSheet;
-import sg.qr.kiarelemb.grading.model.SubjectiveRegion;
-import sg.qr.kiarelemb.grading.model.Template;
-import sg.qr.kiarelemb.grading.pipeline.TemplateProcessor;
+import sg.qr.kiarelemb.exam.template.detect.DetectedBox;
+import sg.qr.kiarelemb.exam.template.detect.TemplateLayoutDetector;
+import sg.qr.kiarelemb.exam.model.SheetLayout;
+import sg.qr.kiarelemb.exam.model.SubjectiveAnswerRegion;
+import sg.qr.kiarelemb.exam.model.SheetTemplate;
+import sg.qr.kiarelemb.exam.processing.SheetTemplateFileStore;
 import swing.qr.kiarelemb.basic.QRLabel;
 import swing.qr.kiarelemb.basic.QRPanel;
 import swing.qr.kiarelemb.basic.QRRoundButton;
@@ -35,32 +35,32 @@ import java.util.List;
  * @description TODO
  * @create 2026/6/4 12:53
  */
-public class NewTmptWindow extends QRDialog {
+public class NewTemplateDialog extends QRDialog {
 	private final File pictureFile;
 	private final List<File> pictureFiles;
 	private final int pageCount;
-	private LayoutDetector detector;
-	private final TmptDataSplitPane dataSplitPane;
+	private TemplateLayoutDetector detector;
+	private final TemplateAnalysisPane dataSplitPane;
 	private QRTextField nameField;
 
-	public NewTmptWindow(File pictureFile) {
+	public NewTemplateDialog(File pictureFile) {
 		this(singlePictureFile(pictureFile));
 	}
 
-	public NewTmptWindow(File pictureFile, int pageCount) {
+	public NewTemplateDialog(File pictureFile, int pageCount) {
 		this(singlePictureFile(pictureFile), pageCount);
 	}
 
-	public NewTmptWindow(List<File> pictureFiles) {
+	public NewTemplateDialog(List<File> pictureFiles) {
 		this(pictureFiles, pictureFiles == null ? 1 : pictureFiles.size());
 	}
 
-	public NewTmptWindow(List<File> pictureFiles, int pageCount) {
+	public NewTemplateDialog(List<File> pictureFiles, int pageCount) {
 		super(MainWindow.INSTANCE);
 		this.pictureFiles = normalizedPictureFiles(pictureFiles);
 		this.pictureFile = this.pictureFiles.get(0);
 		this.pageCount = Math.max(1, pageCount);
-		this.dataSplitPane = new TmptDataSplitPane(null);
+		this.dataSplitPane = new TemplateAnalysisPane(null);
 		initView();
 	}
 
@@ -70,12 +70,12 @@ public class NewTmptWindow extends QRDialog {
 		this.dataSplitPane.setTemplate(detector == null ? null : buildTemplate(defaultTemplateName(pictureFile)));
 	}
 
-	private LayoutDetector detectTemplate(File pictureFile) {
+	private TemplateLayoutDetector detectTemplate(File pictureFile) {
 		if (pictureFile == null) {
 			return null;
 		}
 		try {
-			return LayoutDetector.detectFromTemplate(pictureFile);
+			return TemplateLayoutDetector.detectFromTemplate(pictureFile);
 		} catch (RuntimeException ex) {
 			ex.printStackTrace();
 			QROpinionDialog.messageErrShow(this, "模板识别失败：\n" + ex.getMessage());
@@ -132,7 +132,7 @@ public class NewTmptWindow extends QRDialog {
 
 		File templateDir = new File("sg");
 		File targetFile = new File(templateDir, name);
-		File sgFile = TemplateProcessor.withSgExtension(targetFile);
+		File sgFile = SheetTemplateFileStore.withSgExtension(targetFile);
 		if (sgFile.exists()) {
 			int choice = QROpinionDialog.messageInfoShow(this, "模板已存在，是否覆盖？\n" + sgFile.getAbsolutePath());
 			if (choice != QROpinionDialog.OK) {
@@ -143,8 +143,8 @@ public class NewTmptWindow extends QRDialog {
 		setCursorWait();
 		try {
 			QRFileUtils.dirCreate(templateDir);
-			Template template = buildTemplate(name);
-			File savedFile = TemplateProcessor.save(template, sgFile);
+			SheetTemplate template = buildTemplate(name);
+			File savedFile = SheetTemplateFileStore.save(template, sgFile);
 			QROpinionDialog.messageTellShow(this, "模板 " + savedFile.getName() + " 保存成功。");
 			dispose();
 		} catch (IOException ex) {
@@ -154,14 +154,14 @@ public class NewTmptWindow extends QRDialog {
 		}
 	}
 
-	private Template buildTemplate(String name) {
-		AnswerSheet answerSheet = detector.buildAnswerSheet(
+	private SheetTemplate buildTemplate(String name) {
+		SheetLayout answerSheet = detector.buildAnswerSheet(
 				detector.detectedImageW,
 				detector.detectedImageH,
 				name,
 				new String[0]
 		);
-		return new Template(
+		return new SheetTemplate(
 				name,
 				pictureFile,
 				answerSheet,
@@ -186,25 +186,25 @@ public class NewTmptWindow extends QRDialog {
 		return file == null ? List.of() : List.of(file);
 	}
 
-	private List<SubjectiveRegion> defaultSubjectiveRegions(AnswerSheet answerSheet) {
-		List<SubjectiveRegion> regions = new ArrayList<>();
+	private List<SubjectiveAnswerRegion> defaultSubjectiveRegions(SheetLayout answerSheet) {
+		List<SubjectiveAnswerRegion> regions = new ArrayList<>();
 		Rect firstPageRect = fillBlankRegionRect();
 		int start = answerSheet.getChoiceQuestions().size() + 1;
 		int count = Math.max(1, answerSheet.getFillBlankQuestions().size());
 		if (firstPageRect != null) {
-			regions.add(new SubjectiveRegion("填空题", start, start + count - 1, firstPageRect,
-					SubjectiveRegion.GradingMode.OCR, BigDecimal.ZERO, 0));
+			regions.add(new SubjectiveAnswerRegion("填空题", start, start + count - 1, firstPageRect,
+					SubjectiveAnswerRegion.GradingMode.OCR, BigDecimal.ZERO, 0));
 		}
 		if (pictureFiles.size() >= 2) {
 			int secondPageQuestion = regions.isEmpty() ? start : start + count;
-			regions.add(new SubjectiveRegion("主观题2", secondPageQuestion, secondPageQuestion,
+			regions.add(new SubjectiveAnswerRegion("主观题2", secondPageQuestion, secondPageQuestion,
 					secondPageSubjectiveRect(answerSheet),
-					SubjectiveRegion.GradingMode.MANUAL, BigDecimal.ZERO, 1));
+					SubjectiveAnswerRegion.GradingMode.MANUAL, BigDecimal.ZERO, 1));
 		}
 		return List.copyOf(regions);
 	}
 
-	private Rect secondPageSubjectiveRect(AnswerSheet answerSheet) {
+	private Rect secondPageSubjectiveRect(SheetLayout answerSheet) {
 		try {
 			BufferedImage image = ImageIO.read(pictureFiles.get(1));
 			if (image != null) {
@@ -292,7 +292,7 @@ public class NewTmptWindow extends QRDialog {
 		return new Rect(detector.fillStartX, detector.fillStartY, detector.fillBoxW, detector.fillBoxH);
 	}
 
-	private static Rect toRect(DetectedRect rect) {
+	private static Rect toRect(DetectedBox rect) {
 		return rect == null ? null : new Rect(rect.x(), rect.y(), rect.w(), rect.h());
 	}
 
@@ -302,8 +302,8 @@ public class NewTmptWindow extends QRDialog {
 
 	private String normalizeTemplateName(String rawName) {
 		String name = rawName == null ? "" : rawName.trim();
-		if (name.toLowerCase().endsWith("." + TemplateProcessor.TEMPLATE_EXTENSION)) {
-			name = name.substring(0, name.length() - TemplateProcessor.TEMPLATE_EXTENSION.length() - 1).trim();
+		if (name.toLowerCase().endsWith("." + SheetTemplateFileStore.TEMPLATE_EXTENSION)) {
+			name = name.substring(0, name.length() - SheetTemplateFileStore.TEMPLATE_EXTENSION.length() - 1).trim();
 		}
 		if (name.isEmpty()) {
 			QROpinionDialog.messageErrShow(this, "请输入模板名。");

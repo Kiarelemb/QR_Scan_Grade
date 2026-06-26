@@ -2,8 +2,8 @@ package sg.qr.kiarelemb.start;
 
 import org.bytedeco.opencv.opencv_core.Rect;
 import sg.qr.kiarelemb.component.AnswerSheetPreviewPanel;
-import sg.qr.kiarelemb.grading.model.AnswerSheet;
-import sg.qr.kiarelemb.grading.model.Template;
+import sg.qr.kiarelemb.exam.model.SheetLayout;
+import sg.qr.kiarelemb.exam.model.SheetTemplate;
 import swing.qr.kiarelemb.basic.QRButton;
 import swing.qr.kiarelemb.basic.QRLabel;
 import swing.qr.kiarelemb.basic.QRPanel;
@@ -19,7 +19,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
-public class TmptDataSplitPane extends QRSplitPane {
+public class TemplateAnalysisPane extends QRSplitPane {
 	private static final Font TEXT_FONT = QRColorsAndFonts.createFont(18);
 	private static final Color EXAM_COLOR = new Color(218, 64, 64);
 	private static final Color CHOICE_COLOR = new Color(52, 112, 210);
@@ -39,10 +39,10 @@ public class TmptDataSplitPane extends QRSplitPane {
 	private final QRButton prevPageButton = new QRButton("<");
 	private final QRButton nextPageButton = new QRButton(">");
 	private final QRLabel pageLabel = new QRLabel();
-	private Template template;
+	private SheetTemplate template;
 	private int pageIndex;
 
-	public TmptDataSplitPane(Template template) {
+	public TemplateAnalysisPane(SheetTemplate template) {
 		super(JSplitPane.HORIZONTAL_SPLIT);
 		initView();
 		setTemplate(template);
@@ -75,7 +75,7 @@ public class TmptDataSplitPane extends QRSplitPane {
 		pagePanel.add(nextPageButton);
 	}
 
-	public void setTemplate(Template template) {
+	public void setTemplate(SheetTemplate template) {
 		this.template = template;
 		this.pageIndex = 0;
 		if (template == null) {
@@ -131,12 +131,12 @@ public class TmptDataSplitPane extends QRSplitPane {
 		nextPageButton.setEnabled(multiPage && pageIndex < pageCount - 1 && pageIndex + 1 < template.pictureFiles().size());
 	}
 
-	public Template getTemplate() {
+	public SheetTemplate getTemplate() {
 		return template;
 	}
 
-	private void buildTemplateSummary(Template template) {
-		AnswerSheet sheet = template.answerSheet();
+	private void buildTemplateSummary(SheetTemplate template) {
+		SheetLayout sheet = template.answerSheet();
 		resultPane.clear();
 		resultPane.println("模板名：" + template.name());
 		resultPane.println("页数：" + template.pageCount());
@@ -152,7 +152,7 @@ public class TmptDataSplitPane extends QRSplitPane {
 		resultPane.println("");
 		appendRegion("准考证号区域", template.examRegionRect());
 		appendRegion("选择题区域", template.choiceRegionRect());
-		for (sg.qr.kiarelemb.grading.model.SubjectiveRegion region : template.subjectiveRegions()) {
+		for (sg.qr.kiarelemb.exam.model.SubjectiveAnswerRegion region : template.subjectiveRegions()) {
 			appendRegion(region.name() + "（第 " + (region.pageIndex() + 1) + " 页）", region.region());
 		}
 		resultPane.println("");
@@ -170,7 +170,7 @@ public class TmptDataSplitPane extends QRSplitPane {
 						   + "，宽：" + rect.width() + "，高：" + rect.height());
 	}
 
-	static String buildShortSummary(AnswerSheet sheet) {
+	static String buildShortSummary(SheetLayout sheet) {
 		StringBuilder summary = new StringBuilder();
 		summary.append("选择题").append(sheet.getChoiceQuestions().size()).append("道");
 		if (sheet.getFillBlankQuestions().isEmpty()) {

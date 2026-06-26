@@ -1,7 +1,7 @@
 package sg.qr.kiarelemb.component;
 
 import sg.qr.kiarelemb.data.Keys;
-import sg.qr.kiarelemb.grading.ChoiceCheckTextPane;
+import sg.qr.kiarelemb.exam.ObjectiveReviewTextPane;
 import sg.qr.kiarelemb.start.StartPanel;
 import swing.qr.kiarelemb.QRSwing;
 import swing.qr.kiarelemb.basic.QRPanel;
@@ -39,15 +39,15 @@ public class SplitPane extends QRTransparentSplitPane {
 		topPanel.add(StartPanel.START_PANEL, BorderLayout.SOUTH);
 
 		setTopComponent(topPanel);
-		setBottomComponent(ChoiceCheckTextPane.CHOICE_CHECK_TEXT_PANE.addScrollPane());
+		setBottomComponent(ObjectiveReviewTextPane.CHOICE_CHECK_TEXT_PANE.addScrollPane());
 	}
 
 	public void showStartPanel() {
 		topPanel.removeAll();
 		topPanel.add(StartPanel.START_PANEL, BorderLayout.SOUTH);
 		refreshTopPanel();
-		ChoiceCheckTextPane.CHOICE_CHECK_TEXT_PANE.setReviewAnswerChangeListener(null);
-		ChoiceCheckTextPane.CHOICE_CHECK_TEXT_PANE.clearReviewAnswers();
+		ObjectiveReviewTextPane.CHOICE_CHECK_TEXT_PANE.setReviewAnswerChangeListener(null);
+		ObjectiveReviewTextPane.CHOICE_CHECK_TEXT_PANE.clearReviewAnswers();
 	}
 
 	public void showTopComponent(Component component) {

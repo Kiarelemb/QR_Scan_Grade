@@ -6,13 +6,13 @@ import method.qr.kiarelemb.utils.QRLoggerUtils;
 import method.qr.kiarelemb.utils.QRRandomUtils;
 import org.bytedeco.opencv.global.opencv_imgcodecs;
 import org.bytedeco.opencv.opencv_core.Mat;
-import sg.qr.kiarelemb.grading.layout.LayoutDetector;
-import sg.qr.kiarelemb.grading.model.AnswerSheet;
-import sg.qr.kiarelemb.grading.model.GradingResult;
-import sg.qr.kiarelemb.grading.pipeline.AnswerComparator;
-import sg.qr.kiarelemb.grading.pipeline.ChoiceReader;
-import sg.qr.kiarelemb.grading.pipeline.ImagePreprocessor;
-import sg.qr.kiarelemb.grading.pipeline.RegionDetector;
+import sg.qr.kiarelemb.exam.template.detect.TemplateLayoutDetector;
+import sg.qr.kiarelemb.exam.model.SheetLayout;
+import sg.qr.kiarelemb.exam.model.GradingOutcome;
+import sg.qr.kiarelemb.exam.processing.ObjectiveAnswerGrader;
+import sg.qr.kiarelemb.exam.processing.BubbleMarkReader;
+import sg.qr.kiarelemb.exam.processing.SheetImagePreprocessor;
+import sg.qr.kiarelemb.exam.processing.AnswerRegionBuilder;
 
 import java.io.File;
 import java.time.LocalDateTime;
@@ -48,7 +48,7 @@ public class Test {
 		QRLoggerUtils.initLogger(Level.INFO, Level.CONFIG);
 		QRLoggerUtils.classMsgMaxLength = 120;
 		logger = QRLoggerUtils.getLogger(Test.class);
-		AnswerSheet layout = autoDetectMode("F:\\自编资料\\小测答题卡.png");
+		SheetLayout layout = autoDetectMode("F:\\自编资料\\小测答题卡.png");
 		if (layout == null) {
 			logger.warning("未检测到答题卡模型");
 			return;
@@ -65,7 +65,7 @@ public class Test {
 
 		// ===== 1. 预处理 =====
 		logger.info("===== 预处理管线 =====");
-		Mat result = ImagePreprocessor.preprocess(inputFile);
+		Mat result = SheetImagePreprocessor.preprocess(inputFile);
 		int imgW = result.cols();
 		int imgH = result.rows();
 		logger.info("校正后尺寸: " + imgW + " x " + imgH);
@@ -77,7 +77,7 @@ public class Test {
 		// ===== 2. 构建答题卡布局（手动坐标模式） =====
 		logger.info("===== 构建答题卡布局 =====");
 
-		RegionDetector.calibrateByCornerMarks(result, imgW, imgH, 168, 211);
+		AnswerRegionBuilder.calibrateByCornerMarks(result, imgW, imgH, 168, 211);
 
 		logger.info("准考证号位数: " + layout.getExamIdDigits());
 		logger.info("选择题数量: " + layout.getChoiceQuestions().size());
@@ -85,10 +85,10 @@ public class Test {
 
 		// ===== 3. 批改（仅选择题） =====
 		logger.info("===== 批改结果 =====");
-		ChoiceReader reader = new ChoiceReader(0.30);
-		AnswerComparator comparator = new AnswerComparator(reader);
+		BubbleMarkReader reader = new BubbleMarkReader(0.30);
+		ObjectiveAnswerGrader comparator = new ObjectiveAnswerGrader(reader);
 
-		GradingResult gradeResult = comparator.grade(
+		GradingOutcome gradeResult = comparator.grade(
 				result, layout,
 				layout.getChoiceLabels());
 
@@ -97,7 +97,7 @@ public class Test {
 
 		StringBuilder answers = new StringBuilder();
 		answers.append(gradeResult.examineeId()).append("\t");
-		for (GradingResult.QuestionResult qr : gradeResult.questionResults()) {
+		for (GradingOutcome.QuestionResult qr : gradeResult.questionResults()) {
 			answers.append(qr.detectedAnswer()).append(" ");
 		}
 
@@ -109,7 +109,7 @@ public class Test {
 	 * 阶段①：自动检测模式 —— 从空白模板自动推算所有坐标参数。
 	 * 仅检测布局，不批改。结果打印到控制台，供手动确认或保存。
 	 */
-	private static AnswerSheet autoDetectMode(String filePath) {
+	private static SheetLayout autoDetectMode(String filePath) {
 		File templateFile = new File(filePath);  // 空白模板
 		if (!templateFile.exists()) {
 			logger.warning("空白模板不存在: " + templateFile.getAbsolutePath());
@@ -120,7 +120,7 @@ public class Test {
 		logger.info("===== 阶段①：自动检测空白模板布局 =====");
 		logger.info("输入: " + templateFile.getAbsolutePath());
 
-		LayoutDetector detector = LayoutDetector.detectFromTemplate(templateFile);
+		TemplateLayoutDetector detector = TemplateLayoutDetector.detectFromTemplate(templateFile);
 
 		// 标准答案
 		String[] correctAnswers = {

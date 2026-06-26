@@ -1,9 +1,9 @@
 package sg.qr.kiarelemb.data;
 
 import org.bytedeco.opencv.opencv_core.Mat;
-import sg.qr.kiarelemb.grading.end.ScorePlan;
-import sg.qr.kiarelemb.grading.end.ScoreResult;
-import sg.qr.kiarelemb.grading.model.Project;
+import sg.qr.kiarelemb.exam.results.ScoringPlan;
+import sg.qr.kiarelemb.exam.results.ScoreOutcome;
+import sg.qr.kiarelemb.exam.model.GradingProject;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -53,13 +53,13 @@ public class Utils {
 		}
 	}
 
-	public static List<ScoreResult> calculateNormalScores(Project project, Map<Integer, BigDecimal> questionScores) {
-		return calculateNormalScores(project, new ScorePlan(questionScores, defaultSections(questionScores), List.of("选择")));
+	public static List<ScoreOutcome> calculateNormalScores(GradingProject project, Map<Integer, BigDecimal> questionScores) {
+		return calculateNormalScores(project, new ScoringPlan(questionScores, defaultSections(questionScores), List.of("选择")));
 	}
 
-	public static List<ScoreResult> calculateNormalScores(Project project, ScorePlan scorePlan) {
+	public static List<ScoreOutcome> calculateNormalScores(GradingProject project, ScoringPlan scorePlan) {
 		String[] standardAnswers = project.standardAnswers() == null ? new String[0] : project.standardAnswers();
-		List<ScoreResult> results = new ArrayList<>();
+		List<ScoreOutcome> results = new ArrayList<>();
 
 		for (Map.Entry<String, String> entry : project.combinedAnswersByExamId().entrySet()) {
 			String examineeId = entry.getKey();
@@ -81,11 +81,11 @@ public class Utils {
 				}
 			}
 
-			results.add(new ScoreResult(0, examineeId, "", null, sectionScores, earnedScore, null));
+			results.add(new ScoreOutcome(0, examineeId, "", null, sectionScores, earnedScore, null));
 		}
 
-		results.sort(Comparator.comparing(ScoreResult::earnedScore).reversed()
-				.thenComparing(ScoreResult::examineeId));
+		results.sort(Comparator.comparing(ScoreOutcome::earnedScore).reversed()
+				.thenComparing(ScoreOutcome::examineeId));
 		return rankedResults(results);
 	}
 
@@ -105,17 +105,17 @@ public class Utils {
 		return scores;
 	}
 
-	public static List<ScoreResult> rankedResults(List<ScoreResult> sortedResults) {
-		List<ScoreResult> ranked = new ArrayList<>();
+	public static List<ScoreOutcome> rankedResults(List<ScoreOutcome> sortedResults) {
+		List<ScoreOutcome> ranked = new ArrayList<>();
 		BigDecimal previousScore = null;
 		int rank = 0;
 		for (int i = 0; i < sortedResults.size(); i++) {
-			ScoreResult result = sortedResults.get(i);
+			ScoreOutcome result = sortedResults.get(i);
 			if (previousScore == null || result.earnedScore().compareTo(previousScore) != 0) {
 				rank = i + 1;
 				previousScore = result.earnedScore();
 			}
-			ranked.add(new ScoreResult(
+			ranked.add(new ScoreOutcome(
 					rank,
 					result.examineeId(),
 					result.name(),
@@ -128,7 +128,7 @@ public class Utils {
 		return ranked;
 	}
 
-	public static List<String> buildExportRows(Project project) {
+	public static List<String> buildExportRows(GradingProject project) {
 		List<String> rows = new ArrayList<>();
 		for (Map.Entry<String, String> entry : project.combinedAnswersByExamId().entrySet()) {
 			rows.add(entry.getKey() + "\t" + normalizeAnswerLine(entry.getValue()));

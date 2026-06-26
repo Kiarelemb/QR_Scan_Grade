@@ -4,13 +4,13 @@ import method.qr.kiarelemb.utils.QRLoggerUtils;
 import sg.qr.kiarelemb.component.ProjectStateSaver;
 import sg.qr.kiarelemb.component.SplitPane;
 import sg.qr.kiarelemb.data.Keys;
-import sg.qr.kiarelemb.grading.ProjectReviewPanel;
-import sg.qr.kiarelemb.grading.ProjectManualReviewPanel;
-import sg.qr.kiarelemb.grading.ProjectSubjectiveReviewPanel;
-import sg.qr.kiarelemb.grading.end.ProjectEnd;
-import sg.qr.kiarelemb.grading.model.Project;
-import sg.qr.kiarelemb.grading.model.Template;
-import sg.qr.kiarelemb.grading.pipeline.TemplateProcessor;
+import sg.qr.kiarelemb.exam.ObjectiveReviewPanel;
+import sg.qr.kiarelemb.exam.ManualScoringPanel;
+import sg.qr.kiarelemb.exam.SubjectiveOcrReviewPanel;
+import sg.qr.kiarelemb.exam.results.ResultsPanel;
+import sg.qr.kiarelemb.exam.model.GradingProject;
+import sg.qr.kiarelemb.exam.model.SheetTemplate;
+import sg.qr.kiarelemb.exam.processing.SheetTemplateFileStore;
 import sg.qr.kiarelemb.menu.data.EnglishScoreInput;
 import sg.qr.kiarelemb.menu.type.SettingsItem;
 import sg.qr.kiarelemb.res.Info;
@@ -64,16 +64,16 @@ public class MainWindow extends QRFrame {
 	}
 
 	public void startProject(File projectFile) {
-		startProject(new Project(projectFile));
+		startProject(new GradingProject(projectFile));
 	}
 
-	public void startProject(Project project) {
+	public void startProject(GradingProject project) {
 		setCursorWait();
 		try {
 			project.read();
 			int pageCount = 1;
 			try {
-				Template template = TemplateProcessor.load(new File(project.templateFilePath()));
+				SheetTemplate template = SheetTemplateFileStore.load(new File(project.templateFilePath()));
 				pageCount = template.pageCount();
 			} catch (Exception ex) {
 				logger.warning("Cannot read template page count: " + ex.getMessage());
@@ -103,9 +103,9 @@ public class MainWindow extends QRFrame {
 		}
 	}
 
-	private boolean shouldContinueSubjectiveReview(Project project) {
+	private boolean shouldContinueSubjectiveReview(GradingProject project) {
 		try {
-			Template template = TemplateProcessor.load(new File(project.templateFilePath()));
+			SheetTemplate template = SheetTemplateFileStore.load(new File(project.templateFilePath()));
 			return shouldShowMachineSubjectiveReview(project, template)
 				   || shouldShowManualReview(project, template);
 		} catch (Exception ex) {
@@ -114,34 +114,34 @@ public class MainWindow extends QRFrame {
 		}
 	}
 
-	private boolean shouldShowMachineSubjectiveReview(Project project, Template template) {
-		return ProjectSubjectiveReviewPanel.hasSubjectiveQuestions(project, template)
+	private boolean shouldShowMachineSubjectiveReview(GradingProject project, SheetTemplate template) {
+		return SubjectiveOcrReviewPanel.hasSubjectiveQuestions(project, template)
 			   && !project.allSubjectiveAnswersSaved();
 	}
 
-	private boolean shouldShowManualReview(Project project, Template template) {
-		return ProjectManualReviewPanel.hasManualQuestions(template)
-			   && !ProjectManualReviewPanel.allManualScoresSaved(project, template);
+	private boolean shouldShowManualReview(GradingProject project, SheetTemplate template) {
+		return ManualScoringPanel.hasManualQuestions(template)
+			   && !ManualScoringPanel.allManualScoresSaved(project, template);
 	}
 
-	public void showProjectReview(Project project) {
+	public void showProjectReview(GradingProject project) {
 		setCenterComponent(SplitPane.SPLIT_PANE);
-		SplitPane.SPLIT_PANE.showTopComponent(new ProjectReviewPanel(project));
+		SplitPane.SPLIT_PANE.showTopComponent(new ObjectiveReviewPanel(project));
 	}
 
-	public void showProjectEnd(Project project) {
-		setCenterComponent(new ProjectEnd(project));
+	public void showProjectEnd(GradingProject project) {
+		setCenterComponent(new ResultsPanel(project));
 	}
 
-	public void showAfterChoiceReview(Project project) {
+	public void showAfterChoiceReview(GradingProject project) {
 		try {
-			Template template = TemplateProcessor.load(new File(project.templateFilePath()));
+			SheetTemplate template = SheetTemplateFileStore.load(new File(project.templateFilePath()));
 			if (shouldShowMachineSubjectiveReview(project, template)) {
-				setCenterComponent(new ProjectSubjectiveReviewPanel(project, template));
+				setCenterComponent(new SubjectiveOcrReviewPanel(project, template));
 				return;
 			}
 			if (shouldShowManualReview(project, template)) {
-				setCenterComponent(new ProjectManualReviewPanel(project, template));
+				setCenterComponent(new ManualScoringPanel(project, template));
 				return;
 			}
 		} catch (Exception ex) {

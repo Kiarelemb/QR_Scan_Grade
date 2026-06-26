@@ -1,6 +1,6 @@
 package sg.qr.kiarelemb.test;
 
-import sg.qr.kiarelemb.grading.pipeline.GoogleVisionOcrRecognizer;
+import sg.qr.kiarelemb.exam.processing.GoogleVisionHandwritingOcr;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -24,8 +24,8 @@ public final class GoogleVisionOcrTest {
 		BufferedImage target = cropIfRequested(image, args);
 		String apiKey = apiKey(args);
 
-		GoogleVisionOcrRecognizer.Result result =
-				GoogleVisionOcrRecognizer.recognizeJapaneseDocument(target, apiKey);
+		GoogleVisionHandwritingOcr.Result result =
+				GoogleVisionHandwritingOcr.recognizeJapaneseDocument(target, apiKey);
 		System.out.println("===== Google Vision OCR raw response =====");
 		System.out.println(result.rawResponse());
 		System.out.println("===== Google Vision OCR lines =====");

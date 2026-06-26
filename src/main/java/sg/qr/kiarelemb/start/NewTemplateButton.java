@@ -2,7 +2,7 @@ package sg.qr.kiarelemb.start;
 
 import sg.qr.kiarelemb.MainWindow;
 import sg.qr.kiarelemb.data.Keys;
-import sg.qr.kiarelemb.grading.pipeline.DocumentImageLoader;
+import sg.qr.kiarelemb.exam.processing.DocumentPageLoader;
 import swing.qr.kiarelemb.QRSwing;
 import swing.qr.kiarelemb.window.enhance.QROpinionDialog;
 import swing.qr.kiarelemb.window.utils.QRFileSelectDialog;
@@ -15,11 +15,11 @@ import java.util.List;
 
 import static sg.qr.kiarelemb.data.Keys.SELECTED_FILE_DIRECTORY;
 
-public class NewTemplateBtn extends StartBtn {
+public class NewTemplateButton extends StartActionButton {
 
-	public static final NewTemplateBtn NEW_TEMPLATE_BTN = new NewTemplateBtn();
+	public static final NewTemplateButton NEW_TEMPLATE_BTN = new NewTemplateButton();
 
-	private NewTemplateBtn() {
+	private NewTemplateButton() {
 		super("新建答题卡模板");
 		setToolTipText("导入高清答题卡扫描图或 PDF，以开始新的批阅流程。");
 	}
@@ -52,7 +52,7 @@ public class NewTemplateBtn extends StartBtn {
 	private static QRPicturePreviewDialog getPicturePreviewDialog(QRFileSelectDialog fileSelect) {
 		List<File> templateImageFiles;
 		try {
-			templateImageFiles = DocumentImageLoader.documentImages(fileSelect.selectedFile());
+			templateImageFiles = DocumentPageLoader.documentImages(fileSelect.selectedFile());
 			if (templateImageFiles.isEmpty()) {
 				throw new IllegalStateException("文档没有可读取的页面：" + fileSelect.selectedFile().getAbsolutePath());
 			}
@@ -66,7 +66,7 @@ public class NewTemplateBtn extends StartBtn {
 			@Override
 			protected void sureAction(ActionEvent e) {
 				super.sureAction(e);
-				NewTmptWindow window = new NewTmptWindow(selectedTemplateImages);
+				NewTemplateDialog window = new NewTemplateDialog(selectedTemplateImages);
 				window.setVisible(true);
 			}
 		};

@@ -3,17 +3,21 @@ package sg.qr.kiarelemb.start;
 import sg.qr.kiarelemb.MainWindow;
 import sg.qr.kiarelemb.data.Keys;
 import sg.qr.kiarelemb.exam.NewGradingProjectDialog;
+import sg.qr.kiarelemb.exam.model.SheetLayout;
 import sg.qr.kiarelemb.exam.model.SheetTemplate;
 import sg.qr.kiarelemb.exam.processing.SheetTemplateFileStore;
 import swing.qr.kiarelemb.QRSwing;
 import swing.qr.kiarelemb.basic.QRLabel;
 import swing.qr.kiarelemb.basic.QRPanel;
 import swing.qr.kiarelemb.basic.QRRoundButton;
+import swing.qr.kiarelemb.basic.QRTextField;
 import swing.qr.kiarelemb.theme.QRColorsAndFonts;
 import swing.qr.kiarelemb.utils.QRPicturePreviewPanel;
 import swing.qr.kiarelemb.window.basic.QRDialog;
 import swing.qr.kiarelemb.window.enhance.QROpinionDialog;
+import swing.qr.kiarelemb.window.enhance.QRSmallTipShow;
 import swing.qr.kiarelemb.window.utils.QRFileSelectDialog;
+import swing.qr.kiarelemb.window.utils.QRValueInputDialog;
 
 import javax.swing.border.Border;
 import javax.swing.border.LineBorder;
@@ -41,7 +45,8 @@ public class ExistingTemplatePanel extends QRPanel {
 	private final QRRoundButton moveRightButton = new QRRoundButton("右移");
 	private final QRRoundButton deleteButton = new QRRoundButton("删除");
 	private final QRRoundButton newProjectButton = new QRRoundButton("新建批阅流程");
-	private final QRRoundButton backButton = new QRRoundButton("\u8fd4\u56de");
+	private final QRRoundButton backButton = new QRRoundButton("返回");
+	private final QRRoundButton renameButton = new QRRoundButton("重命名");
 	private TemplateItem selectedItem;
 
 	public ExistingTemplatePanel() {
@@ -56,6 +61,7 @@ public class ExistingTemplatePanel extends QRPanel {
 		topPanel.setBorder(new LineBorder(QRColorsAndFonts.FRAME_COLOR_BACK, 10));
 		QRPanel buttonPanel = new QRPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
 		initToolbarButton(buttonPanel, backButton, this::backToStartPanel);
+		initToolbarButton(buttonPanel, renameButton, this::renameSelectedTemplate);
 		initToolbarButton(buttonPanel, moveLeftButton, this::moveSelectedLeft);
 		initToolbarButton(buttonPanel, moveRightButton, this::moveSelectedRight);
 		initToolbarButton(buttonPanel, deleteButton, this::deleteSelectedTemplate);
@@ -78,7 +84,7 @@ public class ExistingTemplatePanel extends QRPanel {
 	}
 
 	private void initToolbarButton(QRPanel buttonPanel, QRRoundButton button, ActionListener action) {
-		button.setPreferredSize(new Dimension(70, 30));
+		button.setPreferredSize(new Dimension(80, 30));
 		button.addClickAction(action::actionPerformed);
 		buttonPanel.add(button);
 	}
@@ -184,6 +190,77 @@ public class ExistingTemplatePanel extends QRPanel {
 		moveSelectedTemplate(1);
 	}
 
+	private void renameSelectedTemplate(ActionEvent event) {
+		if (selectedItem == null) {
+			QROpinionDialog.messageTellShow(MainWindow.INSTANCE, "请先选择一个模板。");
+			return;
+		}
+		TemplateItem item = selectedItem;
+		QRValueInputDialog input = new QRValueInputDialog(MainWindow.INSTANCE, "新的模板名", "请输入新的模板名：");
+		input.textField().setType(QRTextField.TYPE.FILE_NAME);
+		input.setVisible(true);
+		if (!input.isApproved()) return;
+		String answer = input.getAnswer();
+		String newName = normalizeTemplateName(answer.trim());
+		if (newName.equals(item.template.name())) {
+			QRSmallTipShow.display(MainWindow.INSTANCE, "模板名没有变化。");
+			return;
+		}
+
+		setCursorWait();
+		try {
+			SheetTemplate renamed = renamedTemplate(item.template, newName);
+			SheetTemplateFileStore.save(renamed, item.file);
+			TemplateItem renamedItem = new TemplateItem(item.file, renamed);
+			int index = templateItems.indexOf(item);
+			if (index >= 0) {
+				templateItems.set(index, renamedItem);
+			}
+			selectedItem = renamedItem;
+			refreshTemplateCards();
+			selectTemplate(renamedItem);
+			QRSmallTipShow.display(MainWindow.INSTANCE, "模板已重命名为：" + newName);
+		} catch (IOException ex) {
+			QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "重命名模板失败：\n" + item.file.getAbsolutePath() + "\n" + ex.getMessage());
+		} finally {
+			setCursorDefault();
+			updateEditButtons();
+		}
+	}
+
+	private SheetTemplate renamedTemplate(SheetTemplate template, String newName) {
+		return new SheetTemplate(
+				newName,
+				template.pictureFile(),
+				renamedAnswerSheet(template, newName),
+				template.examRegionRect(),
+				template.choiceRegionRect(),
+				template.fillBlankRegionRect(),
+				template.defaultScoreRules(),
+				template.pageCount(),
+				template.subjectiveRegions(),
+				template.pictureFiles()
+		);
+	}
+
+	private SheetLayout renamedAnswerSheet(SheetTemplate template, String newName) {
+		SheetLayout answerSheet = template.answerSheet();
+		return new SheetLayout(
+				newName,
+				answerSheet.getImageWidth(),
+				answerSheet.getImageHeight(),
+				answerSheet.getExamIdDigits(),
+				answerSheet.getQuestions()
+		);
+	}
+
+	private String normalizeTemplateName(String name) {
+		if (name.toLowerCase().endsWith("." + SheetTemplateFileStore.TEMPLATE_EXTENSION)) {
+			name = name.substring(0, name.length() - SheetTemplateFileStore.TEMPLATE_EXTENSION.length() - 1).trim();
+		}
+		return name;
+	}
+
 	private void moveSelectedTemplate(int offset) {
 		if (selectedItem == null) {
 			QROpinionDialog.messageTellShow(MainWindow.INSTANCE, "请先选择一个模板。");
@@ -210,7 +287,7 @@ public class ExistingTemplatePanel extends QRPanel {
 		}
 		TemplateItem item = selectedItem;
 		int choice = QROpinionDialog.messageInfoShow(MainWindow.INSTANCE, "确认删除模板：\n"
-																		  + item.template.name() + "\n" + item.file.getAbsolutePath());
+		                                                                  + item.template.name() + "\n" + item.file.getAbsolutePath());
 		if (choice != QROpinionDialog.OK) {
 			return;
 		}
@@ -248,6 +325,7 @@ public class ExistingTemplatePanel extends QRPanel {
 
 	private void updateEditButtons() {
 		int selectedIndex = selectedItem == null ? -1 : templateItems.indexOf(selectedItem);
+		renameButton.setEnabled(selectedIndex >= 0);
 		moveLeftButton.setEnabled(selectedIndex > 0);
 		moveRightButton.setEnabled(selectedIndex >= 0 && selectedIndex < templateItems.size() - 1);
 		deleteButton.setEnabled(selectedIndex >= 0);

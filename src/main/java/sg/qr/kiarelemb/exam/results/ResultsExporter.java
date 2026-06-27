@@ -1,16 +1,15 @@
 package sg.qr.kiarelemb.exam.results;
 
 import sg.qr.kiarelemb.MainWindow;
+import sg.qr.kiarelemb.data.Utils;
 import sg.qr.kiarelemb.exam.model.GradingProject;
 import sg.qr.kiarelemb.exam.scoring.QuestionScorePolicy;
 import swing.qr.kiarelemb.task.QRTaskRunner;
 import swing.qr.kiarelemb.window.enhance.QROpinionDialog;
 import swing.qr.kiarelemb.window.utils.QRFileSelectDialog;
-import swing.qr.kiarelemb.window.utils.QRValueInputDialog;
 
 import javax.swing.table.DefaultTableModel;
 import java.io.File;
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.Charset;
@@ -33,7 +32,7 @@ public final class ResultsExporter {
 		QRFileSelectDialog dialog = new QRFileSelectDialog(MainWindow.INSTANCE,
 				QRFileSelectDialog.SelectMode.SAVE_FILE,
 				new File("."),
-				"请选择成绩导出文件夹并输入文件名","csv");
+				"请选择成绩导出文件夹并输入文件名", "csv");
 		dialog.setVisible(true);
 		if (!dialog.selectedSucceeded()) {
 			return;
@@ -180,7 +179,7 @@ public final class ResultsExporter {
 			BigDecimal actual = sectionAverage(projectEnd.scoreResults(), rule.questionType());
 			BigDecimal expected = sectionTotalScore(rule.questionNumbers(), projectEnd.scorePlan().questionScores());
 			builder.append(csv(rule.questionType() + " : 应得 " + formatTwoDecimal(expected)
-							   + " 分，实得均分 " + formatTwoDecimal(actual) + " 分"))
+			                   + " 分，实得均分 " + formatTwoDecimal(actual) + " 分"))
 					.append(System.lineSeparator()).append(System.lineSeparator());
 		}
 	}
@@ -314,7 +313,7 @@ public final class ResultsExporter {
 	}
 
 	private BigDecimal averageScoreResultValue(List<ScoreOutcome> scoreResults,
-											   java.util.function.Function<ScoreOutcome, BigDecimal> getter) {
+	                                           java.util.function.Function<ScoreOutcome, BigDecimal> getter) {
 		BigDecimal sum = BigDecimal.ZERO;
 		int count = 0;
 		for (ScoreOutcome result : scoreResults) {
@@ -328,7 +327,7 @@ public final class ResultsExporter {
 	}
 
 	private void appendQuestionValueRow(StringBuilder builder, String title, List<Integer> questionNumbers,
-										Map<Integer, BigDecimal> values, QuestionValueFormat format) {
+	                                    Map<Integer, BigDecimal> values, QuestionValueFormat format) {
 		List<Object> row = new ArrayList<>();
 		row.add(title);
 		for (Integer questionNumber : questionNumbers) {
@@ -367,14 +366,7 @@ public final class ResultsExporter {
 	}
 
 	private String[] splitAnswers(String answers) {
-		String value = answers == null ? "" : answers.trim();
-		if (value.isEmpty()) {
-			return new String[0];
-		}
-		return Arrays.stream(value.split("[ \\t\\r\\n]+"))
-				.map(String::trim)
-				.filter(answer -> !answer.isEmpty())
-				.toArray(String[]::new);
+		return Utils.splitAnswers(answers);
 	}
 
 	private String normalizeAnswer(String answer) {
@@ -382,11 +374,7 @@ public final class ResultsExporter {
 	}
 
 	private BigDecimal totalScore(Map<Integer, BigDecimal> scores) {
-		BigDecimal total = BigDecimal.ZERO;
-		for (BigDecimal score : scores.values()) {
-			total = total.add(score);
-		}
-		return total;
+		return Utils.totalScore(scores);
 	}
 
 	private String formatOneDecimal(BigDecimal score) {

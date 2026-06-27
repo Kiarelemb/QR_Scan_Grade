@@ -3,18 +3,17 @@ package sg.qr.kiarelemb.start;
 import method.qr.kiarelemb.utils.QRFileUtils;
 import org.bytedeco.opencv.opencv_core.Rect;
 import sg.qr.kiarelemb.MainWindow;
+import sg.qr.kiarelemb.exam.model.SheetLayout;
+import sg.qr.kiarelemb.exam.model.SheetTemplate;
+import sg.qr.kiarelemb.exam.model.SubjectiveAnswerRegion;
+import sg.qr.kiarelemb.exam.processing.SheetTemplateFileStore;
 import sg.qr.kiarelemb.exam.template.detect.DetectedBox;
 import sg.qr.kiarelemb.exam.template.detect.TemplateLayoutDetector;
-import sg.qr.kiarelemb.exam.model.SheetLayout;
-import sg.qr.kiarelemb.exam.model.SubjectiveAnswerRegion;
-import sg.qr.kiarelemb.exam.model.SheetTemplate;
-import sg.qr.kiarelemb.exam.processing.SheetTemplateFileStore;
 import swing.qr.kiarelemb.basic.QRLabel;
 import swing.qr.kiarelemb.basic.QRPanel;
 import swing.qr.kiarelemb.basic.QRRoundButton;
 import swing.qr.kiarelemb.basic.QRTextField;
 import swing.qr.kiarelemb.theme.QRColorsAndFonts;
-import swing.qr.kiarelemb.utils.QRFilePathTextField;
 import swing.qr.kiarelemb.window.basic.QRDialog;
 import swing.qr.kiarelemb.window.enhance.QROpinionDialog;
 
@@ -102,7 +101,7 @@ public class NewTemplateDialog extends QRDialog {
 		QRLabel nameLabel = new QRLabel("模板名：");
 		nameLabel.setPreferredSize(new Dimension(80, 25));
 
-		nameField = new QRTextField();
+		nameField = new QRTextField(QRTextField.TYPE.FILE_NAME);
 		nameField.setTextLeft();
 		nameField.setPreferredSize(new Dimension(220, 25));
 		if (pictureFile != null) {
@@ -310,10 +309,6 @@ public class NewTemplateDialog extends QRDialog {
 		}
 		if (name.isEmpty()) {
 			QROpinionDialog.messageErrShow(this, "请输入模板名。");
-			return null;
-		}
-		if (name.matches(".*[\\\\/:*?\"<>|].*")) {
-			QROpinionDialog.messageErrShow(this, "模板名不能包含 \\ / : * ? \" < > | 这些字符。");
 			return null;
 		}
 		return name;

@@ -2,6 +2,7 @@ package sg.qr.kiarelemb.exam;
 
 import method.qr.kiarelemb.utils.QRFileUtils;
 import sg.qr.kiarelemb.MainWindow;
+import sg.qr.kiarelemb.data.Utils;
 import sg.qr.kiarelemb.exam.model.GradingProject;
 import sg.qr.kiarelemb.exam.model.SheetTemplate;
 import sg.qr.kiarelemb.exam.processing.DocumentPageLoader;
@@ -29,14 +30,14 @@ public class NewGradingProjectDialog extends QRDialog {
 	private final SheetTemplate template;
 	private final File templateFile;
 	private final File answerDirectory;
-	private final QRTextField projectNameField = new QRTextField();
+	private final QRTextField projectNameField = new QRTextField(QRTextField.TYPE.FILE_NAME);
 	private final QRTextPane answersTextPane = new QRTextPane();
-	private final QRTextField machineSubjectiveCountField = new QRTextField();
+	private final QRTextField machineSubjectiveCountField = new QRTextField(QRTextField.TYPE.NUMBERS);
 	private final QRLabel directoryLabel = new QRLabel();
 	private final QRLabel templateLabel = new QRLabel();
 	private final QRLabel countLabel = new QRLabel();
 	private final QRTextPane studentsTextPane = new QRTextPane();
-	private final QRTextField examPrefixField = new QRTextField();
+	private final QRTextField examPrefixField = new QRTextField(QRTextField.TYPE.NUMBERS);
 	private final QRLabel examIdTipLabel = new QRLabel();
 	private final QRTextPane examIdPreviewTextPane = new QRTextPane();
 
@@ -65,7 +66,6 @@ public class NewGradingProjectDialog extends QRDialog {
 
 		projectNameField.setPreferredSize(new Dimension(360, FIELD_HEIGHT));
 		projectNameField.setText(defaultProjectName());
-		projectNameField.fileNameOnly();
 		templateLabel.setText(templateFile == null ? "未选择模板" : templateFile.getAbsolutePath());
 		directoryLabel.setText(answerDirectory == null ? "未选择答卷文件夹" : answerDirectory.getAbsolutePath());
 		machineSubjectiveCountField.setPreferredSize(new Dimension(120, FIELD_HEIGHT));
@@ -144,9 +144,7 @@ public class NewGradingProjectDialog extends QRDialog {
 		label.setPreferredSize(new Dimension(380, FIELD_HEIGHT));
 		panel.add(machineSubjectiveCountField);
 		panel.add(label);
-		machineSubjectiveCountField.addDocumentListenerAction(swing.qr.kiarelemb.listener.QRDocumentListener.TYPE.INSERT, event -> refreshAnswerCountLabel());
-		machineSubjectiveCountField.addDocumentListenerAction(swing.qr.kiarelemb.listener.QRDocumentListener.TYPE.REMOVE, event -> refreshAnswerCountLabel());
-		machineSubjectiveCountField.addDocumentListenerAction(swing.qr.kiarelemb.listener.QRDocumentListener.TYPE.CHANGED, event -> refreshAnswerCountLabel());
+		machineSubjectiveCountField.addDocumentListenerActionAll(event -> refreshAnswerCountLabel());
 		return panel;
 	}
 
@@ -462,22 +460,11 @@ public class NewGradingProjectDialog extends QRDialog {
 			QROpinionDialog.messageErrShow(this, "请输入项目名。");
 			return null;
 		}
-		if (name.matches(".*[\\\\/:*?\"<>|].*")) {
-			QROpinionDialog.messageErrShow(this, "项目名不能包含 \\ / : * ? \" < > | 这些字符。");
-			return null;
-		}
 		return name;
 	}
 
 	private String[] splitAnswers(String text) {
-		String answersText = text == null ? "" : text.trim();
-		if (answersText.isEmpty()) {
-			return new String[0];
-		}
-		return Arrays.stream(answersText.split("[ \\t\\r\\n]+"))
-				.map(String::trim)
-				.filter(answer -> !answer.isEmpty())
-				.toArray(String[]::new);
+		return Utils.splitAnswers(text);
 	}
 
 	private int expectedAnswerCount() {
@@ -496,15 +483,7 @@ public class NewGradingProjectDialog extends QRDialog {
 		if (text.isEmpty()) {
 			return 0;
 		}
-		try {
-			int count = Integer.parseInt(text);
-			if (count < 0) {
-				throw new NumberFormatException();
-			}
-			return count;
-		} catch (NumberFormatException ex) {
-			throw new IllegalArgumentException("机判非选题数必须是非负整数。");
-		}
+		return Integer.parseInt(text);
 	}
 
 	private void refreshAnswerCountLabel() {

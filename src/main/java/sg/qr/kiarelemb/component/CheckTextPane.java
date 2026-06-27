@@ -26,9 +26,7 @@ public class CheckTextPane extends QRTextPane {
 	protected CheckTextPane() {
 		setFont(QRColorsAndFonts.createFont(28));
 		setLineWrap(true);
-		addDocumentListenerAction(QRDocumentListener.TYPE.INSERT, this::textChanged);
-		addDocumentListenerAction(QRDocumentListener.TYPE.REMOVE, this::textChanged);
-		addDocumentListenerAction(QRDocumentListener.TYPE.CHANGED, this::textChanged);
+		addDocumentListenerActionAll(this::textChanged);
 		addCaretListenerAction(event -> {
 			if (hasFocus()) {
 				showCaretQuestionTip();

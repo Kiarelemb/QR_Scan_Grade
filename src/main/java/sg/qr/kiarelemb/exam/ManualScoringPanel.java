@@ -5,9 +5,12 @@ import sg.qr.kiarelemb.MainWindow;
 import sg.qr.kiarelemb.component.ProjectStateSaver;
 import sg.qr.kiarelemb.data.Utils;
 import sg.qr.kiarelemb.exam.model.GradingProject;
-import sg.qr.kiarelemb.exam.model.SubjectiveAnswerRegion;
 import sg.qr.kiarelemb.exam.model.SheetTemplate;
-import swing.qr.kiarelemb.basic.*;
+import sg.qr.kiarelemb.exam.model.SubjectiveAnswerRegion;
+import swing.qr.kiarelemb.basic.QRLabel;
+import swing.qr.kiarelemb.basic.QRPanel;
+import swing.qr.kiarelemb.basic.QRRoundButton;
+import swing.qr.kiarelemb.basic.QRTextField;
 import swing.qr.kiarelemb.inter.QRActionRegister;
 import swing.qr.kiarelemb.task.QRTaskOptions;
 import swing.qr.kiarelemb.task.QRTaskRunner;
@@ -18,7 +21,6 @@ import swing.qr.kiarelemb.window.enhance.QROpinionDialog;
 import swing.qr.kiarelemb.window.utils.QRValueInputDialog;
 
 import javax.imageio.ImageIO;
-import javax.swing.*;
 import javax.swing.border.LineBorder;
 import java.awt.*;
 import java.awt.event.ActionEvent;
@@ -41,7 +43,7 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 	private final QRLabel titleLabel = new QRLabel("人工判分");
 	private final QRLabel progressLabel = new QRLabel();
 	private final QRLabel questionLabel = new QRLabel();
-	private final QRTextField scoreField = new QRTextField();
+	private final QRTextField scoreField = new QRTextField(QRTextField.TYPE.NUMBERS_AND_DECIMAL);
 	private QRTaskWorker<ManualImageLoadResult> imageLoadWorker;
 	private int imageLoadSerial;
 	private int index;
@@ -147,10 +149,10 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 		ManualReviewItem item = items.get(index);
 		String name = project.studentNamesByExamId().getOrDefault(item.examineeId(), "");
 		progressLabel.setText("当前：" + item.answerFile().getName() + "，准考证号：" + item.examineeId()
-							  + (name.isBlank() ? "" : "，姓名：" + name)
-							  + "，进度：" + (index + 1) + " / " + items.size());
+		                      + (name.isBlank() ? "" : "，姓名：" + name)
+		                      + "，进度：" + (index + 1) + " / " + items.size());
 		questionLabel.setText(item.region().name() + "（题号 " + item.region().startQuestion()
-							  + "-" + item.region().endQuestion() + maxScoreText(item.region().maxScore()) + "）");
+		                      + "-" + item.region().endQuestion() + maxScoreText(item.region().maxScore()) + "）");
 		scoreField.setText(project.manualScoresFor(item.examineeId()).getOrDefault(item.region().name(), ""));
 		startImageLoadTask(item, index);
 	}
@@ -258,7 +260,7 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 		}
 		BigDecimal maxScore = item.region().maxScore();
 		if (score.compareTo(BigDecimal.ZERO) < 0
-			|| (maxScore != null && maxScore.compareTo(BigDecimal.ZERO) > 0 && score.compareTo(maxScore) > 0)) {
+		    || (maxScore != null && maxScore.compareTo(BigDecimal.ZERO) > 0 && score.compareTo(maxScore) > 0)) {
 			String range = maxScore != null && maxScore.compareTo(BigDecimal.ZERO) > 0 ? "0-" + Utils.formatScore(maxScore) : "大于等于 0";
 			QROpinionDialog.messageErrShow(MainWindow.INSTANCE, item.region().name() + " 分数应在 " + range + " 之间。");
 			return false;
@@ -307,22 +309,17 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 			return;
 		}
 		QRValueInputDialog input = new QRValueInputDialog(MainWindow.INSTANCE, "1-" + items.size(), "请输入要跳转到的进度：");
+		input.textField().setType(QRTextField.TYPE.NUMBERS);
 		input.setVisible(true);
+		if (!input.isApproved()) return;
 		String answer = input.getAnswer();
-		if (answer == null) {
-			return;
+		int target = Integer.parseInt(answer.trim());
+		if (target < 1 || target > items.size()) {
+			throw new NumberFormatException();
 		}
-		try {
-			int target = Integer.parseInt(answer.trim());
-			if (target < 1 || target > items.size()) {
-				throw new NumberFormatException();
-			}
-			if (saveCurrent()) {
-				index = target - 1;
-				loadCurrent();
-			}
-		} catch (NumberFormatException ex) {
-			QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "请输入有效进度。");
+		if (saveCurrent()) {
+			index = target - 1;
+			loadCurrent();
 		}
 	}
 
@@ -385,8 +382,8 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 		boolean allSubjectiveManual = project != null && project.machineSubjectiveCount() <= 0;
 		return template.subjectiveRegions().stream()
 				.filter(region -> region.mode() == SubjectiveAnswerRegion.GradingMode.MANUAL
-								  || region.mode() == SubjectiveAnswerRegion.GradingMode.MIXED
-								  || (allSubjectiveManual && region.mode() == SubjectiveAnswerRegion.GradingMode.OCR))
+				                  || region.mode() == SubjectiveAnswerRegion.GradingMode.MIXED
+				                  || (allSubjectiveManual && region.mode() == SubjectiveAnswerRegion.GradingMode.OCR))
 				.toList();
 	}
 
@@ -400,8 +397,8 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 		}
 		for (Map.Entry<String, String> entry : savedScores.entrySet()) {
 			if (entry.getKey() != null && !entry.getKey().isBlank()
-				&& sameManualSection(entry.getKey(), region)
-				&& entry.getValue() != null && !entry.getValue().isBlank()) {
+			    && sameManualSection(entry.getKey(), region)
+			    && entry.getValue() != null && !entry.getValue().isBlank()) {
 				return entry.getValue();
 			}
 		}
@@ -413,7 +410,7 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 	}
 
 	public static String scoreForRule(Map<String, String> savedScores, String ruleName, Collection<Integer> questionNumbers,
-									  GradingProject project, SheetTemplate template) {
+	                                  GradingProject project, SheetTemplate template) {
 		if (savedScores == null || savedScores.isEmpty()) {
 			return "";
 		}

@@ -264,7 +264,7 @@ public final class SubjectiveOcrReviewPanel extends QRPanel implements ProjectSt
 		if (!regionTemplate.subjectiveRegions().isEmpty()) {
 			for (SubjectiveAnswerRegion region : regionTemplate.subjectiveRegions()) {
 				if (region.mode() == SubjectiveAnswerRegion.GradingMode.OCR
-					|| region.mode() == SubjectiveAnswerRegion.GradingMode.MIXED) {
+				    || region.mode() == SubjectiveAnswerRegion.GradingMode.MIXED) {
 					return region;
 				}
 			}
@@ -435,8 +435,8 @@ public final class SubjectiveOcrReviewPanel extends QRPanel implements ProjectSt
 
 	private static boolean isOcrRegion(SubjectiveAnswerRegion region) {
 		return region != null
-			   && (region.mode() == SubjectiveAnswerRegion.GradingMode.OCR
-				   || region.mode() == SubjectiveAnswerRegion.GradingMode.MIXED);
+		       && (region.mode() == SubjectiveAnswerRegion.GradingMode.OCR
+		           || region.mode() == SubjectiveAnswerRegion.GradingMode.MIXED);
 	}
 
 	@Override
@@ -495,22 +495,17 @@ public final class SubjectiveOcrReviewPanel extends QRPanel implements ProjectSt
 			return;
 		}
 		QRValueInputDialog input = new QRValueInputDialog(MainWindow.INSTANCE, "1-" + project.answerFiles().size(), "请输入要跳转到的进度：");
+		input.textField().setType(QRTextField.TYPE.NUMBERS);
 		input.setVisible(true);
+		if (!input.isApproved()) return;
 		String answer = input.getAnswer();
-		if (answer == null) {
-			return;
+		int target = Integer.parseInt(answer.trim());
+		if (target < 1 || target > project.answerFiles().size()) {
+			throw new NumberFormatException();
 		}
-		try {
-			int target = Integer.parseInt(answer.trim());
-			if (target < 1 || target > project.answerFiles().size()) {
-				throw new NumberFormatException();
-			}
-			saveCurrent();
-			index = target - 1;
-			loadCurrent();
-		} catch (NumberFormatException ex) {
-			QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "请输入有效进度。");
-		}
+		saveCurrent();
+		index = target - 1;
+		loadCurrent();
 	}
 
 	private void finish() {
@@ -587,7 +582,7 @@ public final class SubjectiveOcrReviewPanel extends QRPanel implements ProjectSt
 			return !plainConfig(Keys.GOOGLE_OCR_API_KEY).isBlank();
 		}
 		return !plainConfig(Keys.BAIDU_OCR_API_KEY).isBlank()
-			   && !plainConfig(Keys.BAIDU_OCR_SECRET_KEY).isBlank();
+		       && !plainConfig(Keys.BAIDU_OCR_SECRET_KEY).isBlank();
 	}
 
 	private OcrResult recognizeBySelectedProvider(BufferedImage image) throws Exception {
@@ -628,7 +623,7 @@ public final class SubjectiveOcrReviewPanel extends QRPanel implements ProjectSt
 	}
 
 	private record SubjectiveImageLoadResult(int answerIndex, File answerFile, BufferedImage image, String savedText,
-											 boolean autoOcr) {
+	                                         boolean autoOcr) {
 	}
 
 	private record OcrTaskResult(int answerIndex, OcrResult result, String displayText, boolean automatic) {

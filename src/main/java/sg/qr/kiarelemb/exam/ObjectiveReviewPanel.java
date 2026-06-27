@@ -5,14 +5,15 @@ import org.bytedeco.opencv.opencv_core.Rect;
 import sg.qr.kiarelemb.MainWindow;
 import sg.qr.kiarelemb.component.AnswerSheetPreviewPanel;
 import sg.qr.kiarelemb.exam.model.*;
-import sg.qr.kiarelemb.exam.processing.*;
+import sg.qr.kiarelemb.exam.processing.BubbleMarkReader;
+import sg.qr.kiarelemb.exam.processing.ObjectiveAnswerGrader;
+import sg.qr.kiarelemb.exam.processing.SheetTemplateFileStore;
 import swing.qr.kiarelemb.QRSwing;
 import swing.qr.kiarelemb.basic.QRLabel;
 import swing.qr.kiarelemb.basic.QRPanel;
 import swing.qr.kiarelemb.basic.QRRoundButton;
 import swing.qr.kiarelemb.basic.QRTable;
-import swing.qr.kiarelemb.inter.QRActionRegister;
-import swing.qr.kiarelemb.listener.QRDocumentListener;
+import swing.qr.kiarelemb.basic.QRTextField;
 import swing.qr.kiarelemb.task.QRTaskOptions;
 import swing.qr.kiarelemb.task.QRTaskRunner;
 import swing.qr.kiarelemb.task.QRTaskWorker;
@@ -23,7 +24,6 @@ import swing.qr.kiarelemb.window.utils.QRValueInputDialog;
 
 import javax.swing.*;
 import javax.swing.border.LineBorder;
-import javax.swing.event.DocumentEvent;
 import javax.swing.event.TableModelEvent;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
@@ -31,7 +31,6 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
-import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -61,9 +60,7 @@ public class ObjectiveReviewPanel extends QRPanel {
 		}
 	};
 	private final QRTable resultTable = new QRTable(tableModel);
-	private final ReviewPreviewPanel previewPanel = new ReviewPreviewPanel(
-			"暂无答卷图片", new Dimension(820, 700), new Dimension(500, 500),
-			EXAM_COLOR, CHOICE_COLOR, FILL_COLOR);
+	private final ReviewPreviewPanel previewPanel = new ReviewPreviewPanel("暂无答卷图片", new Dimension(820, 700), new Dimension(500, 500), EXAM_COLOR, CHOICE_COLOR, FILL_COLOR);
 	private GradingOutcome currentResult;
 	private boolean syncingAnswerText;
 	private boolean syncingAnswerTable;
@@ -148,16 +145,13 @@ public class ObjectiveReviewPanel extends QRPanel {
 		examPanel.add(examLabel, BorderLayout.WEST);
 		examPanel.add(examIdField, BorderLayout.CENTER);
 
-		QRActionRegister<DocumentEvent> dear = e -> {
+		examIdField.textField.addDocumentListenerActionAll(e -> {
 			updatePreviewOverlay();
 			syncExamIdToCheckText();
 			if (!syncingAnswerTable) {
 				syncCheckTextFromTable();
 			}
-		};
-		examIdField.textField.addDocumentListenerAction(QRDocumentListener.TYPE.INSERT, dear);
-		examIdField.textField.addDocumentListenerAction(QRDocumentListener.TYPE.REMOVE, dear);
-		examIdField.textField.addDocumentListenerAction(QRDocumentListener.TYPE.CHANGED, dear);
+		});
 
 		rightPanel.add(examPanel, BorderLayout.NORTH);
 
@@ -281,16 +275,12 @@ public class ObjectiveReviewPanel extends QRPanel {
 			answerLoadWorker.cancel(true);
 		}
 		setAnswerLoading(true);
-		QRTaskOptions options = new QRTaskOptions()
-				.onSuccess((AnswerReviewLoadTask.Result result) -> applyAnswerLoadResult(serial, result))
-				.onError(error -> handleAnswerLoadError(serial, answerFile, error))
-				.onCancelled(() -> {
-					if (serial == answerLoadSerial) {
-						setAnswerLoading(false);
-					}
-				});
-		answerLoadWorker = QRTaskRunner.run(options,
-				new AnswerReviewLoadTask(project, template, answerSheet, comparator, answerFile, answerIndex));
+		QRTaskOptions options = new QRTaskOptions().onSuccess((AnswerReviewLoadTask.Result result) -> applyAnswerLoadResult(serial, result)).onError(error -> handleAnswerLoadError(serial, answerFile, error)).onCancelled(() -> {
+			if (serial == answerLoadSerial) {
+				setAnswerLoading(false);
+			}
+		});
+		answerLoadWorker = QRTaskRunner.run(options, new AnswerReviewLoadTask(project, template, answerSheet, comparator, answerFile, answerIndex));
 	}
 
 	private void applyAnswerLoadResult(int serial, AnswerReviewLoadTask.Result result) {
@@ -306,9 +296,7 @@ public class ObjectiveReviewPanel extends QRPanel {
 			saveRecognizedBaseline(currentResult);
 			return;
 		}
-		if (result.reviewedAnswer() != null
-			&& result.recognizedResult() != null
-			&& savedExamIdUsable(result.recognizedResult().examineeId())) {
+		if (result.reviewedAnswer() != null && result.recognizedResult() != null && savedExamIdUsable(result.recognizedResult().examineeId())) {
 			project.putReviewedAnswer(result.answerFile(), result.reviewedAnswer().examineeId(), result.reviewedAnswer().answers());
 			project.write();
 		}
@@ -329,8 +317,7 @@ public class ObjectiveReviewPanel extends QRPanel {
 		ObjectiveReviewTextPane.CHOICE_CHECK_TEXT_PANE.clearReviewAnswers();
 		previewPanel.setReviewData(currentAnswerSheet, "", Map.of());
 		String message = error == null ? "未知错误" : error.getMessage();
-		QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "读取或识别答卷失败：\n"
-															+ answerFile.getAbsolutePath() + "\n" + message);
+		QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "读取或识别答卷失败：\n" + answerFile.getAbsolutePath() + "\n" + message);
 	}
 
 	private void setAnswerLoading(boolean loading) {
@@ -353,12 +340,7 @@ public class ObjectiveReviewPanel extends QRPanel {
 		tableModel.setRowCount(0);
 		for (GradingOutcome.QuestionResult questionResult : result.questionResults()) {
 			String status = questionResult.uncertain() ? "存疑" : questionResult.correct() ? "正确" : "错误";
-			tableModel.addRow(new Object[]{
-					questionResult.questionNumber(),
-					questionResult.detectedAnswer(),
-					questionResult.expectedAnswer(),
-					status
-			});
+			tableModel.addRow(new Object[]{questionResult.questionNumber(), questionResult.detectedAnswer(), questionResult.expectedAnswer(), status});
 		}
 		updatePreviewOverlay();
 		syncCheckTextFromTable();
@@ -397,29 +379,13 @@ public class ObjectiveReviewPanel extends QRPanel {
 			SheetQuestion question = questions.get(row);
 			String answer = row < answers.length ? displaySavedAnswer(answers[row]) : "";
 			String expected = question.correctAnswer() == null ? "" : question.correctAnswer();
-			questionResults.add(new GradingOutcome.QuestionResult(
-					question.number(),
-					question.type(),
-					expected,
-					answer,
-					answer.equals(expected),
-					false
-			));
+			questionResults.add(new GradingOutcome.QuestionResult(question.number(), question.type(), expected, answer, answer.equals(expected), false));
 		}
-		currentResult = new GradingOutcome(reviewedAnswer.examineeId(),
-				currentAnswerSheet == null ? "" : currentAnswerSheet.getName(),
-				questionResults,
-				questionResults.size(),
-				(int) questionResults.stream().filter(GradingOutcome.QuestionResult::correct).count());
+		currentResult = new GradingOutcome(reviewedAnswer.examineeId(), currentAnswerSheet == null ? "" : currentAnswerSheet.getName(), questionResults, questionResults.size(), (int) questionResults.stream().filter(GradingOutcome.QuestionResult::correct).count());
 		tableModel.setRowCount(0);
 		for (GradingOutcome.QuestionResult questionResult : currentResult.questionResults()) {
 			String status = questionResult.correct() ? "正确" : "错误";
-			tableModel.addRow(new Object[]{
-					questionResult.questionNumber(),
-					questionResult.detectedAnswer(),
-					questionResult.expectedAnswer(),
-					status
-			});
+			tableModel.addRow(new Object[]{questionResult.questionNumber(), questionResult.detectedAnswer(), questionResult.expectedAnswer(), status});
 		}
 		int answerIndex = 0;
 		for (int row = 0; row < tableModel.getRowCount(); row++) {
@@ -578,22 +544,17 @@ public class ObjectiveReviewPanel extends QRPanel {
 		}
 		int max = project.answerFiles().size();
 		QRValueInputDialog input = new QRValueInputDialog(MainWindow.INSTANCE, "1-" + max, "请输入要跳转到的进度：");
+		input.textField().setType(QRTextField.TYPE.NUMBERS);
 		input.setVisible(true);
+		if (!input.isApproved()) return;
 		String answer = input.getAnswer();
-		if (answer == null) {
-			return;
+		int target = Integer.parseInt(answer.trim());
+		if (target < 1 || target > max) {
+			throw new NumberFormatException();
 		}
-		try {
-			int target = Integer.parseInt(answer.trim());
-			if (target < 1 || target > max) {
-				throw new NumberFormatException();
-			}
-			project.setIndex(target - 1);
-			project.write();
-			loadCurrentAnswer();
-		} catch (NumberFormatException ex) {
-			QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "请输入 1 到 " + max + " 之间的数字。");
-		}
+		project.setIndex(target - 1);
+		project.write();
+		loadCurrentAnswer();
 	}
 
 	private void previousAnswer(ActionEvent event) {
@@ -611,9 +572,7 @@ public class ObjectiveReviewPanel extends QRPanel {
 	}
 
 	private boolean isLastAnswer() {
-		return project.answerFiles() != null
-			   && !project.answerFiles().isEmpty()
-			   && project.index() >= project.answerFiles().size() - 1;
+		return project.answerFiles() != null && !project.answerFiles().isEmpty() && project.index() >= project.answerFiles().size() - 1;
 	}
 
 	private boolean allChoiceReviewsSaved() {
@@ -622,11 +581,7 @@ public class ObjectiveReviewPanel extends QRPanel {
 		}
 		for (File answerFile : project.answerFiles()) {
 			GradingProject.ReviewedAnswer reviewedAnswer = project.reviewedAnswerFor(answerFile);
-			if (reviewedAnswer == null
-				|| reviewedAnswer.examineeId() == null
-				|| reviewedAnswer.examineeId().isBlank()
-				|| reviewedAnswer.answers() == null
-				|| reviewedAnswer.answers().isBlank()) {
+			if (reviewedAnswer == null || reviewedAnswer.examineeId() == null || reviewedAnswer.examineeId().isBlank() || reviewedAnswer.answers() == null || reviewedAnswer.answers().isBlank()) {
 				return false;
 			}
 		}
@@ -656,9 +611,7 @@ public class ObjectiveReviewPanel extends QRPanel {
 			String answer = value == null ? "" : value.toString().trim();
 			answers.add(answer.isEmpty() ? BLANK_ANSWER_PLACEHOLDER : answer);
 		}
-		File answerFile = project.answerFiles() == null || project.index() >= project.answerFiles().size()
-				? null
-				: project.answerFiles().get(project.index());
+		File answerFile = project.answerFiles() == null || project.index() >= project.answerFiles().size() ? null : project.answerFiles().get(project.index());
 		project.putReviewedAnswerIfDifferent(answerFile, examineeId, String.join(" ", answers));
 		project.write();
 		return true;
@@ -678,8 +631,7 @@ public class ObjectiveReviewPanel extends QRPanel {
 
 	private static final class ResultCellRenderer extends DefaultTableCellRenderer {
 		@Override
-		public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus,
-													   int row, int column) {
+		public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
 			Component component = super.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
 			if (!isSelected) {
 				String status = String.valueOf(table.getValueAt(row, 3));
@@ -702,8 +654,7 @@ public class ObjectiveReviewPanel extends QRPanel {
 		private Map<Integer, String> detectedAnswers = Map.of();
 		private boolean answerAligned;
 
-		private ReviewPreviewPanel(String emptyText, Dimension preferredSize, Dimension minimumSize,
-								   Color examColor, Color choiceColor, Color fillColor) {
+		private ReviewPreviewPanel(String emptyText, Dimension preferredSize, Dimension minimumSize, Color examColor, Color choiceColor, Color fillColor) {
 			super(emptyText, preferredSize, minimumSize, examColor, choiceColor, fillColor);
 		}
 
@@ -744,8 +695,7 @@ public class ObjectiveReviewPanel extends QRPanel {
 			Rect optionRect = answerAligned ? null : detectedOptionRect(question, detected);
 			if (optionRect != null) {
 				Rectangle optionBounds = scaleRect(box, optionRect);
-				drawBadgeCentered(g2, detected, optionBounds.x + optionBounds.width / 2,
-						optionBounds.y + optionBounds.height / 2, new Color(35, 135, 78, 230));
+				drawBadgeCentered(g2, detected, optionBounds.x + optionBounds.width / 2, optionBounds.y + optionBounds.height / 2, new Color(35, 135, 78, 230));
 				return;
 			}
 
@@ -754,9 +704,7 @@ public class ObjectiveReviewPanel extends QRPanel {
 				return;
 			}
 			Rectangle bounds = scaleRect(box, rect);
-			Color color = ("未填".equals(detected) || "?".equals(detected) || detected.contains("?"))
-					? new Color(210, 95, 55, 230)
-					: new Color(35, 135, 78, 230);
+			Color color = ("未填".equals(detected) || "?".equals(detected) || detected.contains("?")) ? new Color(210, 95, 55, 230) : new Color(35, 135, 78, 230);
 			drawBadge(g2, detected, bounds.x + bounds.width + 4, bounds.y + bounds.height / 2 - 10, color);
 		}
 

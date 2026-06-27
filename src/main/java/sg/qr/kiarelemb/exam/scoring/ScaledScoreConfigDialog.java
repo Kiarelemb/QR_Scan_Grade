@@ -32,13 +32,13 @@ import java.util.List;
 public class ScaledScoreConfigDialog extends QRDialog {
 	private final ResultsPanel projectEnd;
 	private final QRComboBox weightFunctionBox = new QRComboBox("INVERSE", "NEG_LOG", "LOGIT_ABS");
-	private final QRTextField logitPowerField = new QRTextField();
-	private final QRTextField centerPField = new QRTextField();
-	private final QRTextField minPField = new QRTextField();
-	private final QRTextField maxPField = new QRTextField();
-	private final QRTextField minWeightField = new QRTextField();
-	private final QRTextField maxWeightField = new QRTextField();
-	private final QRTextField epsilonField = new QRTextField();
+	private final QRTextField logitPowerField = new QRTextField(QRTextField.TYPE.NUMBERS_AND_DECIMAL);
+	private final QRTextField centerPField = new QRTextField(QRTextField.TYPE.NUMBERS_AND_DECIMAL);
+	private final QRTextField minPField = new QRTextField(QRTextField.TYPE.NUMBERS_AND_DECIMAL);
+	private final QRTextField maxPField = new QRTextField(QRTextField.TYPE.NUMBERS_AND_DECIMAL);
+	private final QRTextField minWeightField = new QRTextField(QRTextField.TYPE.NUMBERS_AND_DECIMAL);
+	private final QRTextField maxWeightField = new QRTextField(QRTextField.TYPE.NUMBERS_AND_DECIMAL);
+	private final QRTextField epsilonField = new QRTextField(QRTextField.TYPE.NUMBERS_AND_DECIMAL);
 	private final QRTextPane scaleHelpTextPane = new QRTextPane();
 	private final DefaultTableModel previewModel = new DefaultTableModel(new String[]{"题号", "题型", "正确率", "赋分", "权重", "大题合计"}, 0) {
 		@Override
@@ -116,48 +116,48 @@ public class ScaledScoreConfigDialog extends QRDialog {
 	private void scaleHelpText() {
 		String text = """
 				尺度算法说明
-
+				
 				用途：
-
+				
 				尺度算分根据每道题的全班正确率调整小题分值。它不是简单平均分配满分，而是先把每道题换算成权重，再在每个计分大题内部按权重分配该大题总分。这样可以让试卷中不同难度的题对成绩产生不同影响。
-
+				
 				函数/算法：
-
+				
 				INVERSE：正确率越低，分值越高；正确率越高，分值越低。适合强调难题。
-
+				
 				NEG_LOG：也是难题权重更高，但比 INVERSE 更平滑。
-
+				
 				LOGIT_ABS：日常推荐用此算法。它以 center.p 为最低点，正确率越远离 center.p，权重越高。适合把"过易题"和"过难题"都拉开，同时让接近中心正确率的题分值较低。
-
+				
 				参数：
-
+				
 				logit.power：控制 LOGIT_ABS 的曲线强度。越大，远离 center.p 的题权重增长越明显，题目分差越大；越小，分差越平缓。使用其他函数时，该参数不作用。
-
+				
 				center.p：LOGIT_ABS 的中心正确率，也是权重最低点。默认 0.5。若希望以 40% 正确率为最低点，可设为 0.4。使用其他函数时，该参数不作用。
-
+				
 				min.p / max.p：正确率裁剪范围。默认 0.1 到 0.9，可避免 0% 或 100% 这类极端值把权重推得过分。
-
+				
 				min.weight / max.weight：权重裁剪范围。用于限制最终权重的最低和最高值，避免小题赋分过小或过大。
-
+				
 				epsilon：极小保护值，防止对数、除法出现 0。一般保持默认即可。
-
+				
 				算分流程：
 				1. 统计每题正确率 p。
 				2. 将 p 限制在 min.p 到 max.p 之间，避免极端正确率导致权重过大或过小。
 				3. 按所选函数把 p 转换为权重。
 				4. 将权重限制在 min.weight 到 max.weight 之间。
 				5. 在每个计分大题内按权重比例分配满分。
-
+				
 				调参建议
-
+				
 				若想让难题分越高，优先使用 NEG_LOG 或 INVERSE。
-
+				
 				若想让难题和简单题都能被赋予更高的分，使用 LOGIT_ABS。
-
+				
 				若小题分差过大，降低 logit.power 或 max.weight。
-
+				
 				若小题分差过小，提高 logit.power 或 max.weight。
-
+				
 				""";
 		scaleHelpTextPane.setText(text);
 		SimpleAttributeSet attrs = new SimpleAttributeSet();

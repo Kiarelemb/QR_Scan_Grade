@@ -54,7 +54,8 @@ src/main/java/sg/qr/kiarelemb/
 │   │   ├── ObjectiveAnswerGrader.java  # ★ 客观题批阅引擎
 │   │   ├── BubbleMarkReader.java       # 气泡填涂率检测
 │   │   ├── BinaryRegionAnalyzer.java   # 二值图 ROI / 白色像素比例工具
-│   │   ├── SheetImagePreprocessor.java # 图像预处理（二值化、校正）
+│   │   ├── SheetImagePreprocessor.java # 图像预处理入口（读取、灰度化、二值化）
+│   │   ├── SheetDeskewer.java          # 纸张边界检测与透视校正
 │   │   ├── DocumentPageLoader.java     # PDF 渲染 / 图片加载
 │   │   ├── SheetCalibrator.java        # 四角标记校准
 │   │   ├── RegistrationMarkDetector.java # 定位黑块检测
@@ -126,6 +127,8 @@ PDF/图片
 .sg 模板 + 答卷图片
   → SheetTemplateFileStore.load()         # 加载模板
   → GradingProject.refreshAnswerFilesFromDirectory()  # 扫描答卷
+  → SheetImagePreprocessor.preprocess()   # 读取、二值化，并调用 SheetDeskewer 透视校正
+  → SheetCalibrator.calibrate()           # 复用模板 SheetLayout，按定位黑块映射到当前答卷
   → ObjectiveAnswerGrader.grade()         # 逐道题判分
     1. 遍历 examIdDigits → 读取准考证号
     2. 遍历 choiceQuestions → BubbleMarkReader 测填涂率 → 选出最佳选项
@@ -178,6 +181,12 @@ PDF/图片
 ### BinaryRegionAnalyzer（二值图区域分析）
 
 封装二值图 ROI 裁剪、矩形膨胀/平移、白色像素比例统计和局部最佳填涂率搜索。当前被 `BubbleMarkReader`、`ObjectiveAnswerGrader`、`SheetCalibrator`、`SheetImagePreprocessor` 复用。
+
+### SheetImagePreprocessor / SheetDeskewer
+
+`SheetImagePreprocessor` 是答卷图像预处理入口，负责读取图片（含中文路径）、灰度化、模糊、阈值化和反色，输出适合后续读取填涂的二值图。
+
+`SheetDeskewer` 负责纸张边界轮廓检测、四角排序、透视矩阵构建、固定尺寸输出（2480×3507）和校正后二次阈值化。该类是答卷预处理的底层图像能力，避免 `SheetImagePreprocessor` 继续承载所有图像处理细节。
 
 ### SheetCalibrator / RegistrationMarkDetector / CoordinateTransform
 

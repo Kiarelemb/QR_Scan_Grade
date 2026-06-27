@@ -5,6 +5,7 @@ import sg.qr.kiarelemb.MainWindow;
 import sg.qr.kiarelemb.exam.model.GradingProject;
 import sg.qr.kiarelemb.exam.model.SheetTemplate;
 import sg.qr.kiarelemb.exam.processing.DocumentPageLoader;
+import sg.qr.kiarelemb.exam.processing.PDFConversionTask;
 import sg.qr.kiarelemb.menu.data.EnglishScoreInput;
 import swing.qr.kiarelemb.basic.*;
 import swing.qr.kiarelemb.theme.QRColorsAndFonts;
@@ -16,6 +17,7 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.WindowEvent;
 import java.io.File;
+import java.io.IOException;
 import java.util.*;
 import java.util.List;
 
@@ -207,6 +209,31 @@ public class NewGradingProjectDialog extends QRDialog {
 			return;
 		}
 
+		// 检查是否需要实际转换 PDF（仅当目录中有 PDF 且未被缓存时）
+		File singlePdf = DocumentPageLoader.singlePdfFile(answerDirectory);
+		boolean needsPdfConversion = false;
+		try {
+			needsPdfConversion = singlePdf != null
+			                     && DocumentPageLoader.convertedPdfImages(singlePdf).size() < DocumentPageLoader.pdfPageCount(singlePdf);
+		} catch (IOException e) {
+			QROpinionDialog.messageErrShow(this, "读取 PDF 信息失败：\n" + e.getMessage());
+			return;
+		}
+		if (needsPdfConversion) {
+			PDFConversionTask.run(this, "正在转换答卷 PDF…",
+					progress -> DocumentPageLoader.sortedAnswerImages(answerDirectory, progress),
+					images -> {
+						try {
+							finishSaveProject(buildAnswerFilePlan(images), projectName, standardAnswers, machineSubjectiveCount);
+						} catch (Exception ex) {
+							QROpinionDialog.messageErrShow(NewGradingProjectDialog.this, "批阅项目保存失败：\n" + ex.getMessage());
+						}
+					},
+					error -> QROpinionDialog.messageErrShow(NewGradingProjectDialog.this, "读取答卷文件失败：\n" + error));
+			return;
+		}
+
+		// 无 PDF 转换需要的同步路径
 		AnswerFilePlan answerFilePlan;
 		try {
 			answerFilePlan = answerFilePlan();
@@ -214,6 +241,15 @@ public class NewGradingProjectDialog extends QRDialog {
 			QROpinionDialog.messageErrShow(this, "读取答卷文件失败：\n" + ex.getMessage());
 			return;
 		}
+		try {
+			finishSaveProject(answerFilePlan, projectName, standardAnswers, machineSubjectiveCount);
+		} catch (Exception ex) {
+			QROpinionDialog.messageErrShow(this, "批阅项目保存失败：\n" + ex.getMessage());
+		}
+	}
+
+	private void finishSaveProject(AnswerFilePlan answerFilePlan, String projectName,
+	                               String[] standardAnswers, int machineSubjectiveCount) throws IOException {
 		List<File> answerFiles = answerFilePlan.frontFiles();
 		File projectFile = new File(PROJECT_DIR, projectName + "." + PROJECT_EXTENSION);
 		if (projectFile.exists()) {
@@ -232,6 +268,7 @@ public class NewGradingProjectDialog extends QRDialog {
 				project.setConvertedPdf(answerFilePlan.convertedPdf(), answerFilePlan.convertedImageCount());
 			}
 			project.setMachineSubjectiveCount(machineSubjectiveCount);
+			project.setExamIdPrefix(validExamIdPrefix());
 			project.setStudentNamesByExamId(buildStudentExamIdMap());
 			project.write();
 			String message = "批阅项目创建成功！";
@@ -245,8 +282,6 @@ public class NewGradingProjectDialog extends QRDialog {
 			} else {
 				MainWindow.INSTANCE.startProject(project);
 			}
-		} catch (Exception ex) {
-			QROpinionDialog.messageErrShow(this, "批阅项目保存失败：\n" + ex.getMessage());
 		} finally {
 			setCursorDefault();
 		}
@@ -264,13 +299,10 @@ public class NewGradingProjectDialog extends QRDialog {
 		}
 		int digits = examIdDigits();
 		int suffixDigits = suffixDigits(names.size());
-		String prefix = examPrefixField.getText() == null ? "" : examPrefixField.getText().trim();
-		if (!prefix.matches("\\d*")) {
-			throw new IllegalArgumentException("准考证号前缀只能包含数字。");
-		}
+		String prefix = validExamIdPrefix();
 		if (prefix.length() + suffixDigits != digits) {
 			throw new IllegalArgumentException("准考证号位数不匹配：模板要求 " + digits + " 位，当前前缀 "
-											   + prefix.length() + " 位，后缀 " + suffixDigits + " 位。");
+			                                   + prefix.length() + " 位，后缀 " + suffixDigits + " 位。");
 		}
 		for (int i = 0; i < names.size(); i++) {
 			result.put(prefix + String.format(Locale.ROOT, "%0" + suffixDigits + "d", i + 1), names.get(i));
@@ -279,7 +311,8 @@ public class NewGradingProjectDialog extends QRDialog {
 	}
 
 	private Map<String, String> importedStudentExamIdMap() {
-		String text = studentsTextPane.getText() == null ? "" : studentsTextPane.getText();
+		String text = examIdPreviewTextPane.getText() == null || examIdPreviewTextPane.getText().isBlank()
+				? studentsTextPane.getText() : examIdPreviewTextPane.getText();
 		String[] lines = text.split("\\R");
 		Map<String, String> result = new LinkedHashMap<>();
 		boolean hasImportedLine = false;
@@ -304,7 +337,7 @@ public class NewGradingProjectDialog extends QRDialog {
 			String name = parts[1].trim();
 			if (digits > 0 && examId.length() != digits) {
 				throw new IllegalArgumentException("学生名单第 " + (i + 1) + " 行准考证号位数不匹配：模板要求 "
-												   + digits + " 位，当前为 " + examId.length() + " 位。");
+				                                   + digits + " 位，当前为 " + examId.length() + " 位。");
 			}
 			if (name.isEmpty()) {
 				throw new IllegalArgumentException("学生名单第 " + (i + 1) + " 行姓名为空。");
@@ -316,9 +349,21 @@ public class NewGradingProjectDialog extends QRDialog {
 		}
 		if (hasImportedLine && hasPlainLine) {
 			throw new IllegalArgumentException("学生名单格式不一致。\n"
-											   + "如果导入已有准考证号，请每行使用：准考证号<Tab>姓名");
+			                                   + "如果导入已有准考证号，请每行使用：准考证号<Tab>姓名");
 		}
 		return hasImportedLine ? result : null;
+	}
+
+	private String validExamIdPrefix() {
+		String prefix = examPrefixField.getText() == null ? "" : examPrefixField.getText().trim();
+		if (!prefix.matches("\\d*")) {
+			throw new IllegalArgumentException("准考证号前缀只能包含数字。");
+		}
+		int digits = examIdDigits();
+		if (digits > 0 && prefix.length() > digits) {
+			throw new IllegalArgumentException("准考证号前缀不能超过模板要求的 " + digits + " 位。");
+		}
+		return prefix;
 	}
 
 	private void previewExamIds() {
@@ -397,7 +442,7 @@ public class NewGradingProjectDialog extends QRDialog {
 	private void updateExamIdTip() {
 		int count = studentNames().size();
 		int suffixDigits = suffixDigits(Math.max(1, count));
-		examIdTipLabel.setText("模板 " + examIdDigits() + " 位；当前 " + count + " 人，后缀 " + suffixDigits + " 位。");
+		examIdTipLabel.setText("模板 " + examIdDigits() + " 位；当前 " + count + " 人，自动编号后缀 " + suffixDigits + " 位。");
 	}
 
 	private int examIdDigits() {
@@ -405,7 +450,7 @@ public class NewGradingProjectDialog extends QRDialog {
 	}
 
 	private int suffixDigits(int studentCount) {
-		return Math.max(1, String.valueOf(Math.max(1, studentCount)).length() + 1);
+		return Math.max(1, String.valueOf(Math.max(1, studentCount)).length());
 	}
 
 	private String normalizeProjectName(String rawName) {
@@ -467,14 +512,17 @@ public class NewGradingProjectDialog extends QRDialog {
 			int choiceCount = template == null ? 0 : template.answerSheet().getChoiceQuestions().size();
 			int machineCount = machineSubjectiveCount();
 			countLabel.setText("需要填写 " + (choiceCount + machineCount) + " 个答案（选择题 "
-							   + choiceCount + "，机判非选 " + machineCount + "）。");
+			                   + choiceCount + "，机判非选 " + machineCount + "）。");
 		} catch (IllegalArgumentException ex) {
 			countLabel.setText(ex.getMessage());
 		}
 	}
 
 	private AnswerFilePlan answerFilePlan() throws java.io.IOException {
-		List<File> allImages = DocumentPageLoader.sortedAnswerImages(answerDirectory);
+		return buildAnswerFilePlan(DocumentPageLoader.sortedAnswerImages(answerDirectory));
+	}
+
+	private AnswerFilePlan buildAnswerFilePlan(List<File> allImages) {
 		List<File> frontFiles = new ArrayList<>();
 		Map<String, File> backFilesByFrontName = new LinkedHashMap<>();
 		File convertedPdf = DocumentPageLoader.singlePdfFile(answerDirectory);
@@ -490,7 +538,7 @@ public class NewGradingProjectDialog extends QRDialog {
 	}
 
 	private record AnswerFilePlan(List<File> frontFiles, Map<String, File> backFilesByFrontName,
-								  File convertedPdf, int convertedImageCount) {
+	                              File convertedPdf, int convertedImageCount) {
 	}
 
 	private String defaultProjectName() {

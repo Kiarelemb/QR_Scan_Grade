@@ -14,6 +14,9 @@ import swing.qr.kiarelemb.basic.QRRoundButton;
 import swing.qr.kiarelemb.basic.QRTable;
 import swing.qr.kiarelemb.inter.QRActionRegister;
 import swing.qr.kiarelemb.listener.QRDocumentListener;
+import swing.qr.kiarelemb.task.QRTaskOptions;
+import swing.qr.kiarelemb.task.QRTaskRunner;
+import swing.qr.kiarelemb.task.QRTaskWorker;
 import swing.qr.kiarelemb.theme.QRColorsAndFonts;
 import swing.qr.kiarelemb.utils.QRClearableTextField;
 import swing.qr.kiarelemb.window.enhance.QROpinionDialog;
@@ -65,6 +68,8 @@ public class ObjectiveReviewPanel extends QRPanel {
 	private GradingOutcome currentResult;
 	private boolean syncingAnswerText;
 	private boolean syncingAnswerTable;
+	private int answerLoadSerial;
+	private QRTaskWorker<AnswerLoadResult> answerLoadWorker;
 
 	private QRRoundButton previousButton;
 	private QRRoundButton nextButton;
@@ -268,44 +273,116 @@ public class ObjectiveReviewPanel extends QRPanel {
 
 		File answerFile = project.answerFiles().get(project.index());
 		progressLabel.setText("当前：" + answerFile.getName() + "，进度：" + (project.index() + 1) + " / " + project.answerFiles().size());
-		refreshNavigationButtons();
+		startAnswerLoadTask(answerFile, project.index());
+	}
 
-		setCursorWait();
-		try {
-			BufferedImage image = ImageIO.read(answerFile);
-			Mat binary = SheetImagePreprocessor.preprocess(answerFile);
-			SheetCalibrator.CalibrationResult calibration = SheetCalibrator.calibrate(binary, template, answerSheet);
-			currentAnswerSheet = calibration.answerSheet();
-			SheetTemplate currentTemplate = new SheetTemplate(
-					template.name(),
-					template.pictureFile(),
-					currentAnswerSheet,
-					calibration.examRegionRect(),
-					calibration.choiceRegionRect(),
-					calibration.fillBlankRegionRect(),
-					template.defaultScoreRules(),
-					template.pageCount());
-			previewPanel.setData(image, currentTemplate, false);
+	private void startAnswerLoadTask(File answerFile, int answerIndex) {
+		int serial = ++answerLoadSerial;
+		if (answerLoadWorker != null && !answerLoadWorker.isDone()) {
+			answerLoadWorker.cancel(true);
+		}
+		setAnswerLoading(true);
+		QRTaskOptions options = new QRTaskOptions()
+				.onSuccess((AnswerLoadResult result) -> applyAnswerLoadResult(serial, result))
+				.onError(error -> handleAnswerLoadError(serial, answerFile, error))
+				.onCancelled(() -> {
+					if (serial == answerLoadSerial) {
+						setAnswerLoading(false);
+					}
+				});
+		answerLoadWorker = QRTaskRunner.run(options,
+				context -> {
+					context.message("正在读取答卷图片...");
+					BufferedImage image = ImageIO.read(answerFile);
+					context.checkCancelled();
+					context.message("正在预处理答卷...");
+					Mat binary = SheetImagePreprocessor.preprocess(answerFile);
+					context.checkCancelled();
+					context.message("正在校准答卷...");
+					SheetCalibrator.CalibrationResult calibration = SheetCalibrator.calibrate(binary, template, answerSheet);
+					context.checkCancelled();
+					SheetLayout loadedAnswerSheet = calibration.answerSheet();
+					SheetTemplate currentTemplate = new SheetTemplate(
+							template.name(),
+							template.pictureFile(),
+							loadedAnswerSheet,
+							calibration.examRegionRect(),
+							calibration.choiceRegionRect(),
+							calibration.fillBlankRegionRect(),
+							template.defaultScoreRules(),
+							template.pageCount());
+					GradingProject.ReviewedAnswer reviewedAnswer = project.reviewedAnswerFor(answerFile);
+					GradingOutcome recognizedResult = null;
+					GradingProject.ReviewedAnswer resultReview = reviewedAnswer;
+					if (reviewedAnswer == null) {
+						context.message("正在识别客观题...");
+						recognizedResult = withFixedExamIdPrefix(
+								comparator.grade(binary, loadedAnswerSheet, loadedAnswerSheet.getChoiceLabels()), loadedAnswerSheet);
+					} else if (!savedExamIdUsable(reviewedAnswer.examineeId())) {
+						context.message("正在复核准考证号...");
+						recognizedResult = withFixedExamIdPrefix(
+								comparator.grade(binary, loadedAnswerSheet, loadedAnswerSheet.getChoiceLabels()), loadedAnswerSheet);
+						if (recognizedResult != null && savedExamIdUsable(recognizedResult.examineeId())) {
+							resultReview = new GradingProject.ReviewedAnswer(recognizedResult.examineeId(), reviewedAnswer.answers());
+						}
+					}
+					return new AnswerLoadResult(answerIndex, answerFile, image, currentTemplate, loadedAnswerSheet,
+							recognizedResult, resultReview, reviewedAnswer == null);
+				});
+	}
 
-			GradingProject.ReviewedAnswer reviewedAnswer = project.reviewedAnswerFor(answerFile);
-			if (reviewedAnswer == null) {
-				currentResult = comparator.grade(binary, currentAnswerSheet, currentAnswerSheet.getChoiceLabels());
-				renderResult(currentResult);
-				saveRecognizedBaseline(currentResult);
-			} else {
-				renderSavedReview(refreshInvalidSavedExamId(answerFile, binary, reviewedAnswer));
-			}
-		} catch (Exception ex) {
-			currentResult = null;
-			currentAnswerSheet = answerSheet;
-			tableModel.setRowCount(0);
-			examIdField.textField.clear();
-			ObjectiveReviewTextPane.CHOICE_CHECK_TEXT_PANE.clearReviewAnswers();
-			previewPanel.setReviewData(currentAnswerSheet, "", Map.of());
-			QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "读取或识别答卷失败：\n"
-																+ answerFile.getAbsolutePath() + "\n" + ex.getMessage());
-		} finally {
-			setCursorDefault();
+	private void applyAnswerLoadResult(int serial, AnswerLoadResult result) {
+		if (serial != answerLoadSerial || result.answerIndex() != project.index()) {
+			return;
+		}
+		setAnswerLoading(false);
+		currentAnswerSheet = result.answerSheet();
+		previewPanel.setData(result.image(), result.template(), false);
+		if (result.newRecognition()) {
+			currentResult = result.recognizedResult();
+			renderResult(currentResult);
+			saveRecognizedBaseline(currentResult);
+			return;
+		}
+		if (result.reviewedAnswer() != null
+			&& result.recognizedResult() != null
+			&& savedExamIdUsable(result.recognizedResult().examineeId())) {
+			project.putReviewedAnswer(result.answerFile(), result.reviewedAnswer().examineeId(), result.reviewedAnswer().answers());
+			project.write();
+		}
+		if (result.reviewedAnswer() != null) {
+			renderSavedReview(result.reviewedAnswer());
+		}
+	}
+
+	private void handleAnswerLoadError(int serial, File answerFile, Throwable error) {
+		if (serial != answerLoadSerial) {
+			return;
+		}
+		setAnswerLoading(false);
+		currentResult = null;
+		currentAnswerSheet = answerSheet;
+		tableModel.setRowCount(0);
+		examIdField.textField.clear();
+		ObjectiveReviewTextPane.CHOICE_CHECK_TEXT_PANE.clearReviewAnswers();
+		previewPanel.setReviewData(currentAnswerSheet, "", Map.of());
+		String message = error == null ? "未知错误" : error.getMessage();
+		QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "读取或识别答卷失败：\n"
+															+ answerFile.getAbsolutePath() + "\n" + message);
+	}
+
+	private void setAnswerLoading(boolean loading) {
+		setCursor(loading ? Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR) : Cursor.getDefaultCursor());
+		previousButton.setEnabled(!loading && project.index() > 0);
+		nextButton.setEnabled(!loading);
+		jumpButton.setEnabled(!loading);
+		exitButton.setEnabled(!loading);
+		alignAnswerButton.setEnabled(!loading);
+		invertColorButton.setEnabled(!loading);
+		if (loading) {
+			nextButton.setText("读取中");
+		} else {
+			refreshNavigationButtons();
 		}
 	}
 
@@ -400,6 +477,7 @@ public class ObjectiveReviewPanel extends QRPanel {
 			return reviewedAnswer;
 		}
 		GradingOutcome recognized = comparator.grade(binary, currentAnswerSheet, currentAnswerSheet.getChoiceLabels());
+		recognized = withFixedExamIdPrefix(recognized);
 		if (!savedExamIdUsable(recognized.examineeId())) {
 			currentResult = recognized;
 			return reviewedAnswer;
@@ -417,6 +495,35 @@ public class ObjectiveReviewPanel extends QRPanel {
 		}
 		Map<String, String> names = project.studentNamesByExamId();
 		return names == null || names.isEmpty() || names.containsKey(value);
+	}
+
+	private GradingOutcome withFixedExamIdPrefix(GradingOutcome result) {
+		return withFixedExamIdPrefix(result, currentAnswerSheet);
+	}
+
+	private GradingOutcome withFixedExamIdPrefix(GradingOutcome result, SheetLayout sheetLayout) {
+		if (result == null) {
+			return null;
+		}
+		String fixedPrefix = project.examIdPrefix();
+		if (fixedPrefix.isBlank()) {
+			return result;
+		}
+		String recognized = result.examineeId() == null ? "" : result.examineeId().trim();
+		String suffix = recognized.length() > fixedPrefix.length() ? recognized.substring(fixedPrefix.length()) : "";
+		int expectedDigits = sheetLayout == null ? 0 : sheetLayout.getExamIdDigits();
+		int suffixDigits = expectedDigits <= 0 ? suffix.length() : Math.max(0, expectedDigits - fixedPrefix.length());
+		if (suffix.length() > suffixDigits) {
+			suffix = suffix.substring(suffix.length() - suffixDigits);
+		}
+		while (suffix.length() < suffixDigits) {
+			suffix += "?";
+		}
+		String corrected = fixedPrefix + suffix;
+		if (corrected.equals(recognized)) {
+			return result;
+		}
+		return new GradingOutcome(corrected, result.sheetName(), result.questionResults(), result.totalScore(), result.earnedScore());
 	}
 
 	private String[] splitSavedAnswers(String answers) {
@@ -618,6 +725,11 @@ public class ObjectiveReviewPanel extends QRPanel {
 		}
 		SheetLayout sheet = currentAnswerSheet == null ? answerSheet : currentAnswerSheet;
 		return sheet != null && sheet.getChoiceQuestions().stream().anyMatch(question -> question.number() == number.intValue());
+	}
+
+	private record AnswerLoadResult(int answerIndex, File answerFile, BufferedImage image, SheetTemplate template,
+									SheetLayout answerSheet, GradingOutcome recognizedResult,
+									GradingProject.ReviewedAnswer reviewedAnswer, boolean newRecognition) {
 	}
 
 	private static final class ResultCellRenderer extends DefaultTableCellRenderer {

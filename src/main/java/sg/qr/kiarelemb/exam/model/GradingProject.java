@@ -25,6 +25,7 @@ public final class GradingProject {
 	private static final String TEMPLATE_FILE = "template.file";
 	private static final String STANDARD_ANSWERS = "standard.answers";
 	private static final String MACHINE_SUBJECTIVE_COUNT = "machine.subjective.count";
+	private static final String EXAM_ID_PREFIX = "exam.id.prefix";
 	private static final String ANSWER_DIRECTORY = "answer.directory";
 	private static final String ANSWER_FILE_COUNT = "answer.file.count";
 	private static final String ANSWER_FILE = "answer.file.";
@@ -58,6 +59,7 @@ public final class GradingProject {
 	private String answerDirectoryPath;
 	private String[] standardAnswers;
 	private int machineSubjectiveCount;
+	private String examIdPrefix = "";
 	private List<File> answerFiles;
 	private int index = 0;
 	private int subjectiveIndex = 0;
@@ -98,6 +100,7 @@ public final class GradingProject {
 		this.answerDirectoryPath = QRPropertiesUtils.getPropInString(prop, ANSWER_DIRECTORY, "");
 		this.standardAnswers = splitAnswers(prop.getProperty(STANDARD_ANSWERS, ""));
 		this.machineSubjectiveCount = QRPropertiesUtils.getPropInInteger(prop, MACHINE_SUBJECTIVE_COUNT, 0);
+		this.examIdPrefix = QRPropertiesUtils.getPropInString(prop, EXAM_ID_PREFIX, "");
 		this.convertedPdfFileName = QRPropertiesUtils.getPropInString(prop, CONVERTED_PDF_FILE, "");
 		this.convertedPdfImageCount = QRPropertiesUtils.getPropInInteger(prop, CONVERTED_PDF_IMAGE_COUNT, 0);
 		this.index = QRPropertiesUtils.getPropInInteger(prop, NEXT_INDEX, 0);
@@ -191,6 +194,7 @@ public final class GradingProject {
 		list.add(TEMPLATE_FILE + "=" + this.templateFilePath);
 		list.add(STANDARD_ANSWERS + "=" + String.join(" ", this.standardAnswers));
 		list.add(MACHINE_SUBJECTIVE_COUNT + "=" + this.machineSubjectiveCount);
+		list.add(EXAM_ID_PREFIX + "=" + this.examIdPrefix);
 		list.add(ANSWER_DIRECTORY + "=" + this.answerDirectoryPath);
 		if (convertedPdfFileName != null && !convertedPdfFileName.isBlank()) {
 			list.add(CONVERTED_PDF_FILE + "=" + convertedPdfFileName);
@@ -245,6 +249,8 @@ public final class GradingProject {
 			}
 		}
 		QRFileUtils.fileWriterWithUTF8(projectFilePath, list);
+		String content = String.join("\n", list).replace("\n", "\\n").replace("\r", "\\r");
+		logger.info("项目已保存: " + content);
 	}
 
 	private String[] splitAnswers(String answers) {
@@ -286,6 +292,18 @@ public final class GradingProject {
 
 	public void setMachineSubjectiveCount(int machineSubjectiveCount) {
 		this.machineSubjectiveCount = Math.max(0, machineSubjectiveCount);
+	}
+
+	public String examIdPrefix() {
+		return examIdPrefix == null ? "" : examIdPrefix;
+	}
+
+	public void setExamIdPrefix(String examIdPrefix) {
+		String value = examIdPrefix == null ? "" : examIdPrefix.trim();
+		if (!value.matches("\\d*")) {
+			throw new IllegalArgumentException("准考证号前缀只能包含数字。");
+		}
+		this.examIdPrefix = value;
 	}
 
 	public List<File> answerFiles() {
@@ -415,7 +433,7 @@ public final class GradingProject {
 	}
 
 	public Map<String, String> combinedAnswersByExamId() {
-		Map<String, String> combined = new LinkedHashMap<>(this.recognizedAnswers);
+		Map<String, String> combined = reviewedAnswersComplete() ? new LinkedHashMap<>() : new LinkedHashMap<>(this.recognizedAnswers);
 		for (Map.Entry<String, ReviewedAnswer> entry : this.reviewedAnswersByFile.entrySet()) {
 			String fileName = entry.getKey();
 			ReviewedAnswer reviewed = entry.getValue();
@@ -438,6 +456,18 @@ public final class GradingProject {
 			combined.put(reviewed.examineeId(), allAnswers.trim());
 		}
 		return combined;
+	}
+
+	private boolean reviewedAnswersComplete() {
+		if (this.answerFiles == null || this.answerFiles.isEmpty()) {
+			return false;
+		}
+		for (File answerFile : this.answerFiles) {
+			if (answerFile == null || !this.reviewedAnswersByFile.containsKey(answerFile.getName())) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	public Map<String, String> subjectiveAnswersByExamId() {
@@ -483,12 +513,10 @@ public final class GradingProject {
 		}
 		String id = examineeId.trim();
 		String normalizedAnswers = normalizeAnswers(answers);
-		String recognized = this.recognizedAnswers.get(id);
-		if (recognized != null && answersEqual(recognized, normalizedAnswers)) {
-			this.reviewedAnswersByFile.remove(answerFile.getName());
-		} else {
-			this.reviewedAnswersByFile.put(answerFile.getName(), new ReviewedAnswer(id, normalizedAnswers));
-		}
+		// 始终保存审阅结果，即使与识别结果一致。
+		// 若删除匹配的条目，下次加载该文件时 reviewedAnswer 为 null，
+		// 会触发重新识别产生不同考号的多余条目。
+		this.reviewedAnswersByFile.put(answerFile.getName(), new ReviewedAnswer(id, normalizedAnswers));
 		this.recognizedCount = this.recognizedAnswers.size();
 	}
 

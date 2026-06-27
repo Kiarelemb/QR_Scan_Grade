@@ -81,32 +81,16 @@ public class ObjectiveAnswerGrader {
 	}
 
 	private DetectedDigit detectExamIdDigit(Mat binary, List<Rect> regions) {
-		List<Rect> digitRegions = examDigitRegions(regions);
 		double max = 0;
 		int maxNum = -1;
-		for (int digit = 0; digit < digitRegions.size(); digit++) {
-			double ratio = bubbleMarkReader.getFillRatio(binary, digitRegions.get(digit));
+		for (int digit = 0; digit < regions.size(); digit++) {
+			double ratio = bubbleMarkReader.getFillRatio(binary, regions.get(digit));
 			if (ratio > max) {
 				max = ratio;
 				maxNum = digit;
 			}
 		}
 		return new DetectedDigit(maxNum, max);
-	}
-
-	private List<Rect> examDigitRegions(List<Rect> regions) {
-		if (regions == null || regions.size() != 10) {
-			return regions == null ? List.of() : regions;
-		}
-		List<Rect> shifted = new ArrayList<>();
-		for (int i = 1; i < regions.size(); i++) {
-			shifted.add(regions.get(i));
-		}
-		Rect previous = regions.get(regions.size() - 2);
-		Rect last = regions.get(regions.size() - 1);
-		int dy = last.y() - previous.y();
-		shifted.add(new Rect(last.x(), last.y() + dy, last.width(), last.height()));
-		return shifted;
 	}
 
 	private record DetectedDigit(int digit, double ratio) {

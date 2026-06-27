@@ -3,6 +3,7 @@ package sg.qr.kiarelemb.start;
 import sg.qr.kiarelemb.MainWindow;
 import sg.qr.kiarelemb.data.Keys;
 import sg.qr.kiarelemb.exam.processing.DocumentPageLoader;
+import sg.qr.kiarelemb.exam.processing.PDFConversionTask;
 import swing.qr.kiarelemb.QRSwing;
 import swing.qr.kiarelemb.window.enhance.QROpinionDialog;
 import swing.qr.kiarelemb.window.utils.QRFileSelectDialog;
@@ -26,51 +27,56 @@ public class NewTemplateButton extends StartActionButton {
 
 	@Override
 	protected void actionEvent(ActionEvent event) {
-		while (true) {
-			MainWindow.INSTANCE.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+		MainWindow.INSTANCE.setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
 
-			String dir = Keys.strValue(SELECTED_FILE_DIRECTORY);
-			File dirFile = new File(dir);
-			QRFileSelectDialog fileSelect = new QRFileSelectDialog(MainWindow.INSTANCE,
-					QRFileSelectDialog.SelectMode.FILE_ONLY, dirFile, "请选择图片或 PDF 文档", "pdf", "jpg", "png");
-			MainWindow.INSTANCE.setCursor(Cursor.getDefaultCursor());
+		String dir = Keys.strValue(SELECTED_FILE_DIRECTORY);
+		File dirFile = new File(dir);
+		QRFileSelectDialog fileSelect = new QRFileSelectDialog(MainWindow.INSTANCE,
+				QRFileSelectDialog.SelectMode.FILE_ONLY, dirFile, "请选择图片或 PDF 文档", "pdf", "jpg", "png");
+		MainWindow.INSTANCE.setCursor(Cursor.getDefaultCursor());
 
-			fileSelect.setVisible(true);
-			if (!fileSelect.selectedSucceeded()) {
-				return;
-			}
+		fileSelect.setVisible(true);
+		if (!fileSelect.selectedSucceeded()) {
+			return;
+		}
 
-			String parent = fileSelect.selectedFile().getParent();
-			QRSwing.setGlobalSetting(SELECTED_FILE_DIRECTORY, parent);
-			QRPicturePreviewDialog dialog = getPicturePreviewDialog(fileSelect);
-			if (dialog.isConfirmed()) {
-				break;
-			}
+		String parent = fileSelect.selectedFile().getParent();
+		QRSwing.setGlobalSetting(SELECTED_FILE_DIRECTORY, parent);
+		File selectedFile = fileSelect.selectedFile();
+
+		if (DocumentPageLoader.isPdfFile(selectedFile)) {
+			convertPdfAndShowPreview(selectedFile);
+		} else {
+			showImagePreview(selectedFile);
 		}
 	}
 
-	private static QRPicturePreviewDialog getPicturePreviewDialog(QRFileSelectDialog fileSelect) {
-		List<File> templateImageFiles;
+	private static void convertPdfAndShowPreview(File pdfFile) {
+		PDFConversionTask.run(MainWindow.INSTANCE, "正在转换 PDF 模板…",
+				progress -> DocumentPageLoader.documentImages(pdfFile, progress),
+				NewTemplateButton::showTemplatePreview,
+				errorMsg -> QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "读取模板文件失败：\n" + errorMsg));
+	}
+
+	private static void showImagePreview(File imageFile) {
 		try {
-			templateImageFiles = DocumentPageLoader.documentImages(fileSelect.selectedFile());
-			if (templateImageFiles.isEmpty()) {
-				throw new IllegalStateException("文档没有可读取的页面：" + fileSelect.selectedFile().getAbsolutePath());
-			}
+			List<File> images = DocumentPageLoader.documentImages(imageFile);
+			showTemplatePreview(images);
 		} catch (Exception ex) {
 			QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "读取模板文件失败：\n" + ex.getMessage());
-			templateImageFiles = List.of(fileSelect.selectedFile());
 		}
-		List<File> selectedTemplateImages = templateImageFiles;
-		File[] selectedTemplateImageArray = selectedTemplateImages.toArray(File[]::new);
-		QRPicturePreviewDialog dialog = new QRPicturePreviewDialog(MainWindow.INSTANCE, selectedTemplateImageArray, true) {
+	}
+
+	private static void showTemplatePreview(List<File> images) {
+		QRPicturePreviewDialog dialog = new QRPicturePreviewDialog(MainWindow.INSTANCE,
+				images.toArray(File[]::new), true) {
 			@Override
 			protected void sureAction(ActionEvent e) {
 				super.sureAction(e);
-				NewTemplateDialog window = new NewTemplateDialog(selectedTemplateImages);
+				NewTemplateDialog window = new NewTemplateDialog(images);
 				window.setVisible(true);
 			}
 		};
 		dialog.setVisible(true);
-		return dialog;
 	}
 }

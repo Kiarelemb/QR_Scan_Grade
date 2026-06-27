@@ -40,6 +40,7 @@ public class Enter {
 //		flw.setVisible(true);
 
 		variousLoad();
+//		QRSleepUtils.sleepSec(100);
 
 //		flw.setVisible(false);
 

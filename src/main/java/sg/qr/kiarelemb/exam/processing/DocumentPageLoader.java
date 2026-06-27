@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.BiConsumer;
 
 public final class DocumentPageLoader {
 	private static final Logger logger = QRLoggerUtils.getLogger(DocumentPageLoader.class);
@@ -34,13 +35,21 @@ public final class DocumentPageLoader {
 	}
 
 	public static List<File> documentImages(File source) throws IOException {
+		return documentImages(source, null);
+	}
+
+	public static List<File> documentImages(File source, BiConsumer<Integer, Integer> progress) throws IOException {
 		if (isPdfFile(source)) {
-			return renderPdf(source);
+			return renderPdf(source, progress);
 		}
 		return List.of(source);
 	}
 
 	public static List<File> sortedAnswerImages(File directory) throws IOException {
+		return sortedAnswerImages(directory, null);
+	}
+
+	public static List<File> sortedAnswerImages(File directory, BiConsumer<Integer, Integer> progress) throws IOException {
 		File[] imageFiles = directory.listFiles(file -> file.isFile() && isImageFile(file));
 		if (imageFiles != null && imageFiles.length > 0) {
 			List<File> sortedImages = new ArrayList<>(Arrays.asList(imageFiles));
@@ -50,7 +59,7 @@ public final class DocumentPageLoader {
 
 		File singlePdf = singlePdfFile(directory);
 		if (singlePdf != null) {
-			return renderPdfToDirectory(singlePdf);
+			return renderPdfToDirectory(singlePdf, progress);
 		}
 		return List.of();
 	}
@@ -97,9 +106,14 @@ public final class DocumentPageLoader {
 	}
 
 	public static List<File> renderPdfToDirectory(File pdfFile) throws IOException {
+		return renderPdfToDirectory(pdfFile, null);
+	}
+
+	public static List<File> renderPdfToDirectory(File pdfFile, BiConsumer<Integer, Integer> progress) throws IOException {
 		List<File> existing = convertedPdfImages(pdfFile);
 		int pageCount = pdfPageCount(pdfFile);
 		if (existing.size() == pageCount) {
+			if (progress != null) progress.accept(pageCount, pageCount);
 			return existing;
 		}
 		List<File> outputFiles = new ArrayList<>();
@@ -107,11 +121,16 @@ public final class DocumentPageLoader {
 			PDFRenderer renderer = new PDFRenderer(document);
 			String prefix = convertedImagePrefix(pdfFile);
 			File directory = pdfFile.getParentFile();
-			for (int page = 0; page < document.getNumberOfPages(); page++) {
+			int totalPages = document.getNumberOfPages();
+			for (int page = 0; page < totalPages; page++) {
+				if (Thread.currentThread().isInterrupted()) {
+					break;
+				}
 				BufferedImage image = renderer.renderImageWithDPI(page, PDF_DPI, ImageType.RGB);
 				File output = new File(directory, prefix + String.format(Locale.ROOT, "%03d", page + 1) + ".png");
 				ImageIO.write(image, "png", output);
 				outputFiles.add(output);
+				if (progress != null) progress.accept(page + 1, totalPages);
 			}
 		}
 		return outputFiles;
@@ -131,20 +150,29 @@ public final class DocumentPageLoader {
 	}
 
 	private static List<File> renderPdf(File pdfFile) throws IOException {
+		return renderPdf(pdfFile, null);
+	}
+
+	private static List<File> renderPdf(File pdfFile, BiConsumer<Integer, Integer> progress) throws IOException {
 		TEMP_DIR.mkdirs();
 		List<File> outputFiles = new ArrayList<>();
 		try (PDDocument document = Loader.loadPDF(pdfFile)) {
 			PDFRenderer renderer = new PDFRenderer(document);
 			String baseName = baseName(pdfFile);
-			for (int page = 0; page < document.getNumberOfPages(); page++) {
+			int totalPages = document.getNumberOfPages();
+			for (int page = 0; page < totalPages; page++) {
+				if (Thread.currentThread().isInterrupted()) {
+					break;
+				}
 				BufferedImage image = renderer.renderImageWithDPI(page, PDF_DPI, ImageType.RGB);
 				File output = new File(TEMP_DIR, baseName + "_p" + String.format(Locale.ROOT, "%03d", page + 1) + ".png");
 				ImageIO.write(image, "png", output);
 				outputFiles.add(output);
+				if (progress != null) progress.accept(page + 1, totalPages);
 			}
 		}
 		logger.fine("PDF渲染完成: " + outputFiles.size() + " 页");
-			return outputFiles;
+		return outputFiles;
 	}
 
 	private static int compareByName(File first, File second) {

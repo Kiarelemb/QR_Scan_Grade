@@ -231,6 +231,34 @@ choiceColsPerRow=[4, 4, 2]
 choiceQuestionsPerCol=[5, 5, 5, 5, 5, 5, 5, 5, 5, 5]
 ```
 
+### 9. 抽取答卷透视校正器
+
+新增：
+
+```text
+src/main/java/sg/qr/kiarelemb/exam/processing/SheetDeskewer.java
+```
+
+当前包含：
+
+- `deskewBinary(Mat binary)`
+- 纸张边界四边形检测
+- 固定输出尺寸 `2480 x 3507`
+- 校正后二次阈值化
+
+已使用位置：
+
+- `SheetImagePreprocessor`
+
+同时清理：
+
+- `SheetImagePreprocessor.deskew(...)`
+- `SheetImagePreprocessor.computeSolidity(...)`
+- `SheetImagePreprocessor.deduplicate(...)`
+- `SheetImagePreprocessor.fillHollowRectangles(...)`
+
+目的：让 `SheetImagePreprocessor` 只保留图片读取、灰度化、二值化入口职责，把纸张边界检测和透视校正收口到可复用的图像处理类。
+
 ## 后续重构建议
 
 ### 1. 继续拆分图像处理职责
@@ -251,7 +279,7 @@ SheetBinarizer
 SheetDeskewer
 ```
 
-保守做法：先只抽 `SheetDeskewer`，因为模板检测和答卷预处理都需要 deskew。
+`SheetDeskewer` 已先行抽取。后续可以继续按风险拆出 `SheetImageReader` / `SheetBinarizer`，或评估是否把 `TemplateLayoutDetectorUtils.deskewForLayout(...)` 的灰度模板校正也复用同一套纸张边界检测逻辑。
 
 ### 2. 进一步收口 SheetCalibrator 内部职责
 

@@ -5,8 +5,7 @@ import sg.qr.kiarelemb.exam.ObjectiveReviewTextPane;
 import sg.qr.kiarelemb.start.StartPanel;
 import swing.qr.kiarelemb.QRSwing;
 import swing.qr.kiarelemb.basic.QRPanel;
-import swing.qr.kiarelemb.combination.QRTransparentSplitPane;
-import swing.qr.kiarelemb.theme.QRColorsAndFonts;
+import swing.qr.kiarelemb.basic.QRSplitPane;
 
 import java.awt.*;
 
@@ -16,13 +15,13 @@ import java.awt.*;
  * @description:
  * @create 2023-01-27 22:33
  **/
-public class SplitPane extends QRTransparentSplitPane {
+public class SplitPane extends QRSplitPane {
 	public static final SplitPane SPLIT_PANE = new SplitPane();
 	public final QRPanel topPanel;
 	public final QRPanel bottomPanel;
 
 	private SplitPane() {
-		super();
+		super(QRSplitPane.VERTICAL_SPLIT);
 
 		int value;
 		try {
@@ -32,6 +31,7 @@ public class SplitPane extends QRTransparentSplitPane {
 			QRSwing.setGlobalSetting(Keys.WINDOW_SPLIT_WEIGHT, value);
 		}
 		setDividerLocation(value);
+		setResizeWeight(0.618);
 
 		topPanel = new QRPanel(false, new BorderLayout());
 		bottomPanel = new QRPanel(false, new BorderLayout());
@@ -59,13 +59,5 @@ public class SplitPane extends QRTransparentSplitPane {
 	private void refreshTopPanel() {
 		topPanel.revalidate();
 		topPanel.repaint();
-	}
-
-	@Override
-	protected void paintDivider(Graphics2D g) {
-		super.paintDivider(g);
-		g.setColor(QRColorsAndFonts.LINE_COLOR);
-		Dimension size = divider.getSize();
-		g.fillRect(0, 0, size.width, size.height);
 	}
 }

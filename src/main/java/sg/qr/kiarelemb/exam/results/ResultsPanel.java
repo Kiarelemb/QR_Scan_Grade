@@ -160,7 +160,7 @@ public class ResultsPanel extends QRPanel {
 	private Component buildBottomPanel() {
 		QRPanel panel = new QRPanel(false, new BorderLayout(8, 0));
 		panel.setBorder(new LineBorder(QRColorsAndFonts.FRAME_COLOR_BACK, 10));
-		summaryLabel.setText("已校对 " + project.recognizedAnswers().size() + " 份答卷。");
+		summaryLabel.setText("已校对 " + project.combinedAnswersByExamId().size() + " 份答卷。");
 		panel.add(summaryLabel, BorderLayout.CENTER);
 
 		QRPanel buttonPanel = new QRPanel(false, new FlowLayout(FlowLayout.RIGHT, 8, 0));

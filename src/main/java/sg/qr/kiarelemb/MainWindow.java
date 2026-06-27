@@ -10,6 +10,8 @@ import sg.qr.kiarelemb.exam.SubjectiveOcrReviewPanel;
 import sg.qr.kiarelemb.exam.results.ResultsPanel;
 import sg.qr.kiarelemb.exam.model.GradingProject;
 import sg.qr.kiarelemb.exam.model.SheetTemplate;
+import sg.qr.kiarelemb.exam.processing.DocumentPageLoader;
+import sg.qr.kiarelemb.exam.processing.PDFConversionTask;
 import sg.qr.kiarelemb.exam.processing.SheetTemplateFileStore;
 import sg.qr.kiarelemb.menu.data.EnglishScoreInput;
 import sg.qr.kiarelemb.menu.type.SettingsItem;
@@ -23,6 +25,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.WindowEvent;
 import java.io.File;
+import java.io.IOException;
 import java.util.logging.Logger;
 
 /**
@@ -68,16 +71,43 @@ public class MainWindow extends QRFrame {
 	}
 
 	public void startProject(GradingProject project) {
+		project.read();
+		int pageCount = 1;
+		try {
+			SheetTemplate template = SheetTemplateFileStore.load(new File(project.templateFilePath()));
+			pageCount = template.pageCount();
+		} catch (Exception ex) {
+			logger.warning("Cannot read template page count: " + ex.getMessage());
+		}
+		int finalPageCount = pageCount;
+
+		// 检查是否需要实际转换 PDF
+		File answerDir = new File(project.answerDirectoryPath());
+		boolean needsConversion = false;
+		try {
+			File singlePdf = DocumentPageLoader.singlePdfFile(answerDir);
+			if (singlePdf != null
+				&& DocumentPageLoader.convertedPdfImages(singlePdf).size() < DocumentPageLoader.pdfPageCount(singlePdf)) {
+				needsConversion = true;
+			}
+		} catch (IOException e) {
+			logger.warning("Cannot check PDF state: " + e.getMessage());
+		}
+
+		if (needsConversion) {
+			PDFConversionTask.run(this, "正在加载答卷…",
+					progress -> DocumentPageLoader.sortedAnswerImages(answerDir, progress),
+					images -> continueStartProject(project, finalPageCount),
+					error -> swing.qr.kiarelemb.window.enhance.QROpinionDialog.messageErrShow(this, "加载答卷失败：\n" + error));
+			return;
+		}
+
+		continueStartProject(project, pageCount);
+	}
+
+	private void continueStartProject(GradingProject project, int pageCount) {
 		setCursorWait();
 		try {
-			project.read();
-			int pageCount = 1;
-			try {
-				SheetTemplate template = SheetTemplateFileStore.load(new File(project.templateFilePath()));
-				pageCount = template.pageCount();
-			} catch (Exception ex) {
-				logger.warning("Cannot read template page count: " + ex.getMessage());
-			}
 			if (project.refreshAnswerFilesFromDirectory(pageCount)) {
 				project.write();
 			}

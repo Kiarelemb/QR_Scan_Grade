@@ -354,9 +354,6 @@ public class NewGradingProjectDialog extends QRDialog {
 
 	private String validExamIdPrefix() {
 		String prefix = examPrefixField.getText() == null ? "" : examPrefixField.getText().trim();
-		if (!prefix.matches("\\d*")) {
-			throw new IllegalArgumentException("准考证号前缀只能包含数字。");
-		}
 		int digits = examIdDigits();
 		if (digits > 0 && prefix.length() > digits) {
 			throw new IllegalArgumentException("准考证号前缀不能超过模板要求的 " + digits + " 位。");

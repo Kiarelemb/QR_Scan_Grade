@@ -4,11 +4,7 @@ import method.qr.kiarelemb.utils.QRLoggerUtils;
 import org.bytedeco.javacpp.BytePointer;
 import org.bytedeco.opencv.global.opencv_core;
 import org.bytedeco.opencv.global.opencv_imgproc;
-import org.bytedeco.opencv.opencv_core.Mat;
-import org.bytedeco.opencv.opencv_core.MatVector;
-import org.bytedeco.opencv.opencv_core.Point;
-import org.bytedeco.opencv.opencv_core.Rect;
-import org.bytedeco.opencv.opencv_core.Size;
+import org.bytedeco.opencv.opencv_core.*;
 import sg.qr.kiarelemb.exam.geometry.SheetGeometryUtils;
 
 import java.util.logging.Logger;
@@ -17,9 +13,6 @@ public final class SheetDeskewer {
 	private static final Logger logger = QRLoggerUtils.getLogger(SheetDeskewer.class);
 	private static final int OUTPUT_WIDTH = 2480;
 	private static final int OUTPUT_HEIGHT = 3507;
-
-	private SheetDeskewer() {
-	}
 
 	/**
 	 * 检测纸张边界并透视校正到固定答题卡尺寸。
@@ -46,9 +39,9 @@ public final class SheetDeskewer {
 
 		SheetGeometryUtils.sortCorners(paperCorners);
 		logger.info("纸张四角坐标: TL(" + paperCorners[0].x() + "," + paperCorners[0].y()
-					+ ") TR(" + paperCorners[1].x() + "," + paperCorners[1].y()
-					+ ") BR(" + paperCorners[2].x() + "," + paperCorners[2].y()
-					+ ") BL(" + paperCorners[3].x() + "," + paperCorners[3].y() + ")");
+		            + ") TR(" + paperCorners[1].x() + "," + paperCorners[1].y()
+		            + ") BR(" + paperCorners[2].x() + "," + paperCorners[2].y()
+		            + ") BL(" + paperCorners[3].x() + "," + paperCorners[3].y() + ")");
 
 		int outWidth = (int) Math.max(
 				euclideanDist(paperCorners[0], paperCorners[1]),
@@ -64,7 +57,7 @@ public final class SheetDeskewer {
 		}
 
 		logger.info("纸张四边尺寸: " + outWidth + "x" + outHeight
-					+ " -> 固定输出: " + OUTPUT_WIDTH + "x" + OUTPUT_HEIGHT);
+		            + " -> 固定输出: " + OUTPUT_WIDTH + "x" + OUTPUT_HEIGHT);
 
 		Mat srcMat = SheetGeometryUtils.buildCornerMat(
 				paperCorners[0], paperCorners[1],
@@ -83,7 +76,7 @@ public final class SheetDeskewer {
 		int resultNonZero = opencv_core.countNonZero(result);
 		double resultFill = (double) resultNonZero / (result.rows() * result.cols());
 		logger.info("透视校正完成，输出尺寸: " + OUTPUT_WIDTH + "x" + OUTPUT_HEIGHT
-					+ "，非零像素占比: " + String.format("%.2f%%", resultFill * 100));
+		            + "，非零像素占比: " + String.format("%.2f%%", resultFill * 100));
 
 		srcMat.release();
 		dstMat.release();

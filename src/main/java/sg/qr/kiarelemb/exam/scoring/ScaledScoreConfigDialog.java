@@ -31,7 +31,7 @@ import java.util.List;
  */
 public class ScaledScoreConfigDialog extends QRDialog {
 	private final ResultsPanel projectEnd;
-	private final QRComboBox weightFunctionBox = new QRComboBox("INVERSE", "NEG_LOG", "LOGIT_ABS");
+	private final QRComboBox weightFunctionBox = new QRComboBox("INVERSE", "NEG_LOG", "LOGIT_ABS", "LOGIT_ABS_NORMALIZED");
 	private final QRTextField logitPowerField = new QRTextField(QRTextField.TYPE.NUMBERS_AND_DECIMAL);
 	private final QRTextField centerPField = new QRTextField(QRTextField.TYPE.NUMBERS_AND_DECIMAL);
 	private final QRTextField minPField = new QRTextField(QRTextField.TYPE.NUMBERS_AND_DECIMAL);
@@ -39,6 +39,8 @@ public class ScaledScoreConfigDialog extends QRDialog {
 	private final QRTextField minWeightField = new QRTextField(QRTextField.TYPE.NUMBERS_AND_DECIMAL);
 	private final QRTextField maxWeightField = new QRTextField(QRTextField.TYPE.NUMBERS_AND_DECIMAL);
 	private final QRTextField epsilonField = new QRTextField(QRTextField.TYPE.NUMBERS_AND_DECIMAL);
+	private final QRTextField discardBelowPField = new QRTextField(QRTextField.TYPE.NUMBERS_AND_DECIMAL);
+	private final QRTextField discardAbovePField = new QRTextField(QRTextField.TYPE.NUMBERS_AND_DECIMAL);
 	private final QRTextPane scaleHelpTextPane = new QRTextPane();
 	private final DefaultTableModel previewModel = new DefaultTableModel(new String[]{"题号", "题型", "正确率", "赋分", "权重", "大题合计"}, 0) {
 		@Override
@@ -103,6 +105,8 @@ public class ScaledScoreConfigDialog extends QRDialog {
 		addConfigRow(fieldsPanel, gbc, "min.weight", minWeightField);
 		addConfigRow(fieldsPanel, gbc, "max.weight", maxWeightField);
 		addConfigRow(fieldsPanel, gbc, "epsilon", epsilonField);
+		addConfigRow(fieldsPanel, gbc, "discard.low.p", discardBelowPField);
+		addConfigRow(fieldsPanel, gbc, "discard.high.p", discardAbovePField);
 		panel.add(fieldsPanel, BorderLayout.NORTH);
 
 		scaleHelpTextPane.setEditableFalseButCursorEdit();
@@ -129,6 +133,8 @@ public class ScaledScoreConfigDialog extends QRDialog {
 				
 				LOGIT_ABS：日常推荐用此算法。它以 center.p 为最低点，正确率越远离 center.p，权重越高。适合把"过易题"和"过难题"都拉开，同时让接近中心正确率的题分值较低。
 				
+				LOGIT_ABS_NORMALIZED：LOGIT_ABS 的归一化版本。center.p 对应 min.weight，min.p/max.p 附近会向 max.weight 靠近，min.weight/max.weight 的调参效果更直观。
+				
 				参数：
 				
 				logit.power：控制 LOGIT_ABS 的曲线强度。越大，远离 center.p 的题权重增长越明显，题目分差越大；越小，分差越平缓。使用其他函数时，该参数不作用。
@@ -140,6 +146,8 @@ public class ScaledScoreConfigDialog extends QRDialog {
 				min.weight / max.weight：权重裁剪范围。用于限制最终权重的最低和最高值，避免小题赋分过小或过大。
 				
 				epsilon：极小保护值，防止对数、除法出现 0。一般保持默认即可。
+				
+				discard.low.p / discard.high.p：废题正确率边界。正确率小于等于 discard.low.p，或大于等于 discard.high.p 的题会被视为废题，该题不赋分，所在大题分值分配给其他未废题。默认 -1 和 2 表示关闭废题判定。
 				
 				算分流程：
 				1. 统计每题正确率 p。
@@ -180,8 +188,10 @@ public class ScaledScoreConfigDialog extends QRDialog {
 		scaleHelpTextPane.changeTextStyle("难题权重更高", strong);
 		scaleHelpTextPane.changeTextStyle("更平滑", strong);
 		scaleHelpTextPane.changeTextStyle("日常推荐用此算法", strong);
+		scaleHelpTextPane.changeTextStyle("归一化版本", strong);
 		scaleHelpTextPane.changeTextStyle("权重最低点", strong);
 		scaleHelpTextPane.changeTextStyle("限制最终权重的最低和最高值", strong);
+		scaleHelpTextPane.changeTextStyle("废题正确率边界", strong);
 		doc.setParagraphAttributes(scaleHelpTextPane.getText().indexOf("调参建议"), 4, attrs, false);
 		scaleHelpTextPane.changeTextStyle("想让难题分越高", strong);
 		scaleHelpTextPane.changeTextStyle("想让难题和简单题都能被赋予更高的分", strong);
@@ -246,12 +256,15 @@ public class ScaledScoreConfigDialog extends QRDialog {
 		minWeightField.setText(formatDouble(config.minWeight()));
 		maxWeightField.setText(formatDouble(config.maxWeight()));
 		epsilonField.setText(formatDouble(config.epsilon()));
+		discardBelowPField.setText(formatDouble(config.discardBelowP()));
+		discardAbovePField.setText(formatDouble(config.discardAboveP()));
 	}
 
 	private boolean refreshPreview() {
 		try {
 			this.config = readConfig();
 			this.report = projectEnd.calculateScaleScoreReport(this.config);
+			this.config = this.report.config();
 			renderScalePreview(report);
 			return true;
 		} catch (ResultsPanel.ScoreRuleException ex) {
@@ -271,7 +284,9 @@ public class ScaledScoreConfigDialog extends QRDialog {
 				parseDouble(maxPField.getText(), "max.p"),
 				parseDouble(minWeightField.getText(), "min.weight"),
 				parseDouble(maxWeightField.getText(), "max.weight"),
-				parseDouble(epsilonField.getText(), "epsilon")
+				parseDouble(epsilonField.getText(), "epsilon"),
+				parseDouble(discardBelowPField.getText(), "discard.low.p"),
+				parseDouble(discardAbovePField.getText(), "discard.high.p")
 		);
 	}
 

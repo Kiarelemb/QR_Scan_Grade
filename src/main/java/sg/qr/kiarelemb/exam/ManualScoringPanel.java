@@ -140,7 +140,7 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 			progressLabel.setText("没有需要人工判分的主观题。");
 			BufferedImage blank = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB);
 			picturePanel.setImage(blank, new Dimension(1, 1));
-			scoreField.setText("");
+			scoreField.clear();
 			return;
 		}
 		index = Math.max(0, Math.min(index, items.size() - 1));

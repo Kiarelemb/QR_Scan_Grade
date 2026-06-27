@@ -39,8 +39,9 @@ public final class QuestionScorePolicy {
 		boolean[][] absent = buildAbsentMatrix(students);
 		double[] rawRate = computeRawRates(students, absent);
 		double[] boundedRate = computeBoundedRates(rawRate);
-		double[] weights = computeWeights(boundedRate);
-		double[] questionScores = computeScaleQuestionScores(weights);
+		boolean[] discarded = computeDiscardedQuestions(rawRate);
+		double[] weights = computeWeights(boundedRate, discarded);
+		double[] questionScores = computeScaleQuestionScores(weights, discarded);
 		double[] sectionAverage = computeSectionAverages(students, absent, questionScores);
 		List<ScaleStudentScore> studentScores = computeStudentScores(students, absent, questionScores, sectionAverage);
 
@@ -136,42 +137,85 @@ public final class QuestionScorePolicy {
 		return boundedRate;
 	}
 
-	private double[] computeWeights(double[] boundedRate) {
+	private boolean[] computeDiscardedQuestions(double[] rawRate) {
+		boolean[] discarded = new boolean[rawRate.length];
+		for (int i = 0; i < rawRate.length; i++) {
+			discarded[i] = rawRate[i] <= config.discardBelowP() || rawRate[i] >= config.discardAboveP();
+		}
+		return discarded;
+	}
+
+	private double[] computeWeights(double[] boundedRate, boolean[] discarded) {
 		double[] weights = new double[boundedRate.length];
+		double centerLogit = logit(config.centerP());
+		double maxLogitDistance = maxLogitDistance(centerLogit);
 		for (int i = 0; i < boundedRate.length; i++) {
-			weights[i] = Math.min(config.maxWeight(), Math.max(config.minWeight(), computeWeight(boundedRate[i])));
+			if (discarded[i]) {
+				weights[i] = 0.0;
+			} else {
+				weights[i] = Math.min(config.maxWeight(), Math.max(config.minWeight(),
+						computeWeight(boundedRate[i], centerLogit, maxLogitDistance)));
+			}
 		}
 		return weights;
 	}
 
-	private double computeWeight(double p) {
+	private double computeWeight(double p, double centerLogit, double maxLogitDistance) {
 		return switch (config.weightFunction()) {
 			case INVERSE -> 1.0 / (p + config.epsilon());
 			case NEG_LOG -> -Math.log(p + config.epsilon());
-			case LOGIT_ABS -> Math.pow(Math.abs(logit(p) - logit(config.centerP())), config.logitPower());
+			case LOGIT_ABS -> Math.pow(Math.abs(logit(p) - centerLogit), config.logitPower());
+			case LOGIT_ABS_NORMALIZED -> normalizedLogitAbsWeight(p, centerLogit, maxLogitDistance);
 		};
+	}
+
+	private double normalizedLogitAbsWeight(double p, double centerLogit, double maxLogitDistance) {
+		if (maxLogitDistance <= config.epsilon()) {
+			return config.minWeight();
+		}
+		double distance = Math.abs(logit(p) - centerLogit);
+		double normalizedDistance = Math.min(1.0, distance / maxLogitDistance);
+		double shaped = Math.pow(normalizedDistance, config.logitPower());
+		return config.minWeight() + shaped * (config.maxWeight() - config.minWeight());
+	}
+
+	private double maxLogitDistance(double centerLogit) {
+		double left = Math.abs(logit(config.minP()) - centerLogit);
+		double right = Math.abs(logit(config.maxP()) - centerLogit);
+		return Math.max(left, right);
 	}
 
 	private double logit(double p) {
 		return Math.log((p + config.epsilon()) / (1 - p + config.epsilon()));
 	}
 
-	private double[] computeScaleQuestionScores(double[] weights) {
+	private double[] computeScaleQuestionScores(double[] weights, boolean[] discarded) {
 		double[] scores = new double[totalQuestions];
 		for (ScoreSection section : sections) {
 			List<Integer> indices = section.questionIndices();
-			double sumWeight = indices.stream().mapToDouble(i -> weights[i]).sum();
+			List<Integer> scoredIndices = indices.stream().filter(i -> !discarded[i]).toList();
+			if (scoredIndices.isEmpty()) {
+				continue;
+			}
+			double sumWeight = scoredIndices.stream().mapToDouble(i -> weights[i]).sum();
+			if (sumWeight <= config.epsilon()) {
+				continue;
+			}
 			double[] temp = new double[indices.size()];
 			double allocated = 0;
 			for (int i = 0; i < indices.size(); i++) {
-				double score = section.totalScore() * (weights[indices.get(i)] / sumWeight);
+				int questionIndex = indices.get(i);
+				if (discarded[questionIndex]) {
+					continue;
+				}
+				double score = section.totalScore() * (weights[questionIndex] / sumWeight);
 				double rounded = round(score);
 				temp[i] = rounded;
 				allocated += rounded;
 			}
 			double diff = round(section.totalScore() - allocated);
 			if (Math.abs(diff) > config.epsilon() && !indices.isEmpty()) {
-				adjustScores(temp, indices, weights, diff);
+				adjustScores(temp, indices, weights, discarded, diff);
 			}
 			for (int i = 0; i < indices.size(); i++) {
 				scores[indices.get(i)] = temp[i];
@@ -245,18 +289,27 @@ public final class QuestionScorePolicy {
 		return ranked;
 	}
 
-	private void adjustScores(double[] scores, List<Integer> indices, double[] weights, double diff) {
+	private void adjustScores(double[] scores, List<Integer> indices, double[] weights, boolean[] discarded, double diff) {
 		if (Math.abs(diff) < config.epsilon()) {
 			return;
 		}
-		int target = 0;
-		for (int i = 1; i < indices.size(); i++) {
+		int target = -1;
+		for (int i = 0; i < indices.size(); i++) {
+			if (discarded[indices.get(i)]) {
+				continue;
+			}
+			if (target < 0) {
+				target = i;
+				continue;
+			}
 			if ((diff > 0 && weights[indices.get(i)] > weights[indices.get(target)])
 				|| (diff < 0 && weights[indices.get(i)] < weights[indices.get(target)])) {
 				target = i;
 			}
 		}
-		scores[target] = round(scores[target] + diff);
+		if (target >= 0) {
+			scores[target] = round(scores[target] + diff);
+		}
 	}
 
 	private int findSectionIndexByQuestion(int questionIndex) {
@@ -319,7 +372,8 @@ public final class QuestionScorePolicy {
 	public enum WeightFunction {
 		INVERSE,
 		NEG_LOG,
-		LOGIT_ABS
+		LOGIT_ABS,
+		LOGIT_ABS_NORMALIZED
 	}
 
 	public record Config(WeightFunction weightFunction,
@@ -329,9 +383,11 @@ public final class QuestionScorePolicy {
 						 double maxP,
 						 double minWeight,
 						 double maxWeight,
-						 double epsilon) {
+						 double epsilon,
+						 double discardBelowP,
+						 double discardAboveP) {
 		public static Config defaults() {
-			return new Config(WeightFunction.LOGIT_ABS, 0.5, 0.5, 0.1, 0.9, 0.3, 2.0, 1e-6);
+			return new Config(WeightFunction.LOGIT_ABS, 0.5, 0.5, 0.1, 0.9, 0.3, 2.0, 1e-6, -1.0, 2.0);
 		}
 
 		private Config normalized() {
@@ -346,7 +402,14 @@ public final class QuestionScorePolicy {
 			double normalizedEpsilon = epsilon <= 0 ? 1e-6 : epsilon;
 			double normalizedLogitPower = logitPower <= 0 ? 1.0 : logitPower;
 			double normalizedCenterP = Math.min(normalizedMaxP, Math.max(normalizedMinP, centerP));
-			return new Config(function, normalizedLogitPower, normalizedCenterP, normalizedMinP, normalizedMaxP, normalizedMinWeight, normalizedMaxWeight, normalizedEpsilon);
+			double normalizedDiscardBelowP = Math.min(1.0, Math.max(-1.0, discardBelowP));
+			double normalizedDiscardAboveP = Math.min(2.0, Math.max(0.0, discardAboveP));
+			if (normalizedDiscardAboveP <= normalizedDiscardBelowP) {
+				normalizedDiscardBelowP = -1.0;
+				normalizedDiscardAboveP = 2.0;
+			}
+			return new Config(function, normalizedLogitPower, normalizedCenterP, normalizedMinP, normalizedMaxP, normalizedMinWeight, normalizedMaxWeight,
+					normalizedEpsilon, normalizedDiscardBelowP, normalizedDiscardAboveP);
 		}
 	}
 

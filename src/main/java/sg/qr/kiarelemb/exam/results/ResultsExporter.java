@@ -194,6 +194,8 @@ public final class ResultsExporter {
 		appendCsvRow(builder, "min.weight", formatDouble(config.minWeight()));
 		appendCsvRow(builder, "max.weight", formatDouble(config.maxWeight()));
 		appendCsvRow(builder, "epsilon", formatDouble(config.epsilon()));
+		appendCsvRow(builder, "discard.low.p", formatDouble(config.discardBelowP()));
+		appendCsvRow(builder, "discard.high.p", formatDouble(config.discardAboveP()));
 		builder.append(System.lineSeparator());
 	}
 

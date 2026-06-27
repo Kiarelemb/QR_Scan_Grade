@@ -80,6 +80,10 @@ public class Enter {
 		QRSwing.customFontName(font);
 		//endregion 全局界面字体
 
+		// 关闭第三方库的无害警告日志
+		Logger.getLogger("com.github.kwhat.jnativehook").setLevel(Level.OFF);     // XkbGetKeyboard 错误
+		Logger.getLogger("org.apache.pdfbox").setLevel(Level.OFF);              // 字体回退警告
+		Logger.getLogger("org.apache.fontbox").setLevel(Level.OFF);             // 字体缺少 PostScript 名
 		QRSwing.registerGlobalKeyEvents();
 
 		QRSwing.registerGlobalEventWindow(MainWindow.INSTANCE);

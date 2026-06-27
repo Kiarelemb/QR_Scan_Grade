@@ -3,8 +3,8 @@ package sg.qr.kiarelemb.start;
 import sg.qr.kiarelemb.MainWindow;
 import sg.qr.kiarelemb.data.Keys;
 import sg.qr.kiarelemb.exam.processing.DocumentPageLoader;
-import sg.qr.kiarelemb.exam.processing.PDFConversionTask;
 import swing.qr.kiarelemb.QRSwing;
+import swing.qr.kiarelemb.task.QRTaskRunner;
 import swing.qr.kiarelemb.window.enhance.QROpinionDialog;
 import swing.qr.kiarelemb.window.utils.QRFileSelectDialog;
 import swing.qr.kiarelemb.window.utils.QRPicturePreviewDialog;
@@ -52,10 +52,10 @@ public class NewTemplateButton extends StartActionButton {
 	}
 
 	private static void convertPdfAndShowPreview(File pdfFile) {
-		PDFConversionTask.run(MainWindow.INSTANCE, "正在转换 PDF 模板…",
-				progress -> DocumentPageLoader.documentImages(pdfFile, progress),
+		QRTaskRunner.runWithProgress(MainWindow.INSTANCE, "正在转换 PDF 模板…",
+				context -> DocumentPageLoader.documentImages(pdfFile, context::progress),
 				NewTemplateButton::showTemplatePreview,
-				errorMsg -> QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "读取模板文件失败：\n" + errorMsg));
+				error -> QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "读取模板文件失败：\n" + error.getMessage()));
 	}
 
 	private static void showImagePreview(File imageFile) {

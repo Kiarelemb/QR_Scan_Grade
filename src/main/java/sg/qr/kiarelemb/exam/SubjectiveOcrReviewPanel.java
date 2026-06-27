@@ -18,6 +18,9 @@ import sg.qr.kiarelemb.exam.processing.SheetImagePreprocessor;
 import swing.qr.kiarelemb.QRSwing;
 import swing.qr.kiarelemb.basic.*;
 import swing.qr.kiarelemb.inter.QRActionRegister;
+import swing.qr.kiarelemb.task.QRTaskOptions;
+import swing.qr.kiarelemb.task.QRTaskRunner;
+import swing.qr.kiarelemb.task.QRTaskWorker;
 import swing.qr.kiarelemb.theme.QRColorsAndFonts;
 import swing.qr.kiarelemb.utils.PicturePanel;
 import swing.qr.kiarelemb.window.basic.QRDialog;
@@ -30,6 +33,7 @@ import javax.swing.*;
 import javax.swing.border.LineBorder;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
@@ -54,6 +58,10 @@ public final class SubjectiveOcrReviewPanel extends QRPanel implements ProjectSt
 	private final QRLabel progressLabel = new QRLabel();
 	private final Set<String> autoOcrAttemptedFiles = new HashSet<>();
 	private BufferedImage currentSubjectiveImage;
+	private QRTaskWorker<SubjectiveImageLoadResult> imageLoadWorker;
+	private QRTaskWorker<OcrTaskResult> ocrWorker;
+	private int imageLoadSerial;
+	private int ocrSerial;
 	private int index;
 
 	public SubjectiveOcrReviewPanel(GradingProject project, SheetTemplate template) {
@@ -65,7 +73,7 @@ public final class SubjectiveOcrReviewPanel extends QRPanel implements ProjectSt
 	}
 
 	public static boolean hasSubjectiveQuestions(GradingProject project, SheetTemplate template) {
-		return project != null && machineSubjectiveCount(project, template) > 0 && template != null && !template.answerSheet().getFillBlankQuestions().isEmpty();
+		return project != null && project.machineSubjectiveCount() > 0 && hasOcrRegion(template);
 	}
 
 	private void initView() {
@@ -99,14 +107,14 @@ public final class SubjectiveOcrReviewPanel extends QRPanel implements ProjectSt
 		buttons.add(back);
 
 		buttons.add(button("上一张", event -> previous()));
-		QRRoundButton nextBtn = button("下一张", event -> next());
+		QRRoundButton nextBtn = button("下一张", event -> next(event));
 		buttons.add(nextBtn);
 		buttons.add(button("进入算分", event -> finish()));
 		panel.add(buttons, BorderLayout.EAST);
 
 		QRSwing.registerGlobalAction("ctrl + Enter", event -> {
 			if (nextBtn.isVisible()) {
-				next();
+				next(null);
 			}
 		}, true);
 
@@ -134,21 +142,61 @@ public final class SubjectiveOcrReviewPanel extends QRPanel implements ProjectSt
 		project.write();
 		File answerFile = project.answerFiles().get(index);
 		progressLabel.setText("当前：" + answerFile.getName() + "，进度：" + (index + 1) + " / " + project.answerFiles().size());
-		try {
+		startImageLoadTask(answerFile, index);
+	}
+
+	private void startImageLoadTask(File answerFile, int answerIndex) {
+		int serial = ++imageLoadSerial;
+		if (imageLoadWorker != null && !imageLoadWorker.isDone()) {
+			imageLoadWorker.cancel(true);
+		}
+		currentSubjectiveImage = null;
+		setCursorWait();
+		QRTaskOptions options = new QRTaskOptions()
+				.onSuccess((SubjectiveImageLoadResult result) -> applyImageLoadResult(serial, result))
+				.onError(error -> handleImageLoadError(serial, error))
+				.onCancelled(() -> {
+					if (serial == imageLoadSerial) {
+						setCursorDefault();
+					}
+				});
+		imageLoadWorker = QRTaskRunner.run(options, context -> {
+			context.message("正在读取主观题区域...");
 			SubjectiveAnswerRegion modelRegion = subjectiveRegion(template);
 			File subjectiveFile = subjectiveImageFile(answerFile, modelRegion);
 			BufferedImage image = ImageIO.read(subjectiveFile);
-			currentSubjectiveImage = cropSubjectiveRegion(image, calibratedSubjectiveRegion(subjectiveFile, modelRegion));
-			picturePanel.setImage(currentSubjectiveImage, pictureDisplaySize(currentSubjectiveImage));
-			picturePanel.resetView();
-			String saved = project.subjectiveAnswerFor(answerFile);
-			textPane.setText(saved.isBlank() ? defaultSubjectiveText() : displaySubjectiveText(saved));
-			if (saved.isBlank() && hasConfiguredOcrKey() && autoOcrAttemptedFiles.add(answerFile.getName())) {
-				SwingUtilities.invokeLater(this::autoRecognizeCurrent);
+			context.checkCancelled();
+			if (image == null) {
+				throw new IOException("不支持的图片格式或图片已损坏。");
 			}
-		} catch (IOException ex) {
-			QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "读取主观题区域失败：\n" + ex.getMessage());
+			context.message("正在校准主观题区域...");
+			BufferedImage cropped = cropSubjectiveRegion(image, calibratedSubjectiveRegion(subjectiveFile, modelRegion));
+			String saved = project.subjectiveAnswerFor(answerFile);
+			boolean autoOcr = saved.isBlank() && hasConfiguredOcrKey() && autoOcrAttemptedFiles.add(answerFile.getName());
+			return new SubjectiveImageLoadResult(answerIndex, answerFile, cropped, saved, autoOcr);
+		});
+	}
+
+	private void applyImageLoadResult(int serial, SubjectiveImageLoadResult result) {
+		if (serial != imageLoadSerial || result.answerIndex() != index) {
+			return;
 		}
+		setCursorDefault();
+		currentSubjectiveImage = result.image();
+		picturePanel.setImage(currentSubjectiveImage, pictureDisplaySize(currentSubjectiveImage));
+		picturePanel.resetView();
+		textPane.setText(result.savedText().isBlank() ? defaultSubjectiveText() : displaySubjectiveText(result.savedText()));
+		if (result.autoOcr()) {
+			autoRecognizeCurrent();
+		}
+	}
+
+	private void handleImageLoadError(int serial, Throwable error) {
+		if (serial != imageLoadSerial) {
+			return;
+		}
+		setCursorDefault();
+		QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "读取主观题区域失败：\n" + error.getMessage());
 	}
 
 	private CroppedRegion calibratedSubjectiveRegion(File answerFile, SubjectiveAnswerRegion modelRegion) {
@@ -356,10 +404,39 @@ public final class SubjectiveOcrReviewPanel extends QRPanel implements ProjectSt
 		if (project.machineSubjectiveCount() > 0) {
 			return project.machineSubjectiveCount();
 		}
-		if (template == null || project.standardAnswers() == null) {
+		if (template == null) {
 			return 0;
 		}
-		return Math.max(0, project.standardAnswers().length - template.answerSheet().getChoiceQuestions().size());
+		int regionCount = template.subjectiveRegions().stream()
+				.filter(SubjectiveOcrReviewPanel::isOcrRegion)
+				.mapToInt(region -> region.endQuestion() - region.startQuestion() + 1)
+				.sum();
+		if (regionCount > 0) {
+			return regionCount;
+		}
+		if (project.standardAnswers() != null) {
+			int standardCount = project.standardAnswers().length - template.answerSheet().getChoiceQuestions().size();
+			if (standardCount > 0) {
+				return standardCount;
+			}
+		}
+		return template.answerSheet().getFillBlankQuestions().size();
+	}
+
+	private static boolean hasOcrRegion(SheetTemplate template) {
+		if (template == null) {
+			return false;
+		}
+		if (template.subjectiveRegions().stream().anyMatch(SubjectiveOcrReviewPanel::isOcrRegion)) {
+			return true;
+		}
+		return !template.answerSheet().getFillBlankQuestions().isEmpty();
+	}
+
+	private static boolean isOcrRegion(SubjectiveAnswerRegion region) {
+		return region != null
+			   && (region.mode() == SubjectiveAnswerRegion.GradingMode.OCR
+				   || region.mode() == SubjectiveAnswerRegion.GradingMode.MIXED);
 	}
 
 	@Override
@@ -393,12 +470,24 @@ public final class SubjectiveOcrReviewPanel extends QRPanel implements ProjectSt
 		}
 	}
 
-	private void next() {
+	private void next(ActionEvent event) {
 		saveCurrent();
+		if (isCtrlDown(event)) {
+			if (project.allSubjectiveAnswersSaved()) {
+				MainWindow.INSTANCE.showAfterChoiceReview(project);
+			} else {
+				QROpinionDialog.messageTellShow(MainWindow.INSTANCE, "还有答卷未完成填空题校对，不能直接进入后续。");
+			}
+			return;
+		}
 		if (project.answerFiles() != null && index < project.answerFiles().size() - 1) {
 			index++;
 			loadCurrent();
 		}
+	}
+
+	private boolean isCtrlDown(ActionEvent event) {
+		return event != null && (event.getModifiers() & (InputEvent.CTRL_DOWN_MASK | InputEvent.CTRL_MASK)) != 0;
 	}
 
 	private void jump() {
@@ -435,37 +524,61 @@ public final class SubjectiveOcrReviewPanel extends QRPanel implements ProjectSt
 			QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "当前没有可识别的主观题图片。");
 			return;
 		}
-		setCursorWait();
-		try {
-			OcrResult result = recognizeBySelectedProvider();
-			String displayText = normalizedSubjectiveText(result.text().isBlank() ? result.rawResponse() : result.text());
-			logOcrResult(result);
-			textPane.setText(displayText);
-			saveCurrent();
-			QRSmallTipShow.display(MainWindow.INSTANCE, ocrProviderName(result.provider()) + " OCR 识别完成。");
-		} catch (Exception ex) {
-			QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "OCR 识别失败：\n" + ex.getMessage());
-		} finally {
-			setCursorDefault();
-		}
+		startOcrTask(false);
 	}
 
 	private void autoRecognizeCurrent() {
 		if (currentSubjectiveImage == null || !hasConfiguredOcrKey()) {
 			return;
 		}
+		startOcrTask(true);
+	}
+
+	private void startOcrTask(boolean automatic) {
+		int serial = ++ocrSerial;
+		if (ocrWorker != null && !ocrWorker.isDone()) {
+			ocrWorker.cancel(true);
+		}
+		int answerIndex = index;
+		BufferedImage image = currentSubjectiveImage;
 		setCursorWait();
-		try {
-			OcrResult result = recognizeBySelectedProvider();
+		QRTaskOptions options = new QRTaskOptions()
+				.onSuccess((OcrTaskResult result) -> applyOcrResult(serial, result))
+				.onError(error -> handleOcrError(serial, automatic, error))
+				.onCancelled(() -> {
+					if (serial == ocrSerial) {
+						setCursorDefault();
+					}
+				});
+		ocrWorker = QRTaskRunner.run(options, context -> {
+			context.message(automatic ? "正在自动 OCR 识别..." : "正在 OCR 识别...");
+			OcrResult result = recognizeBySelectedProvider(image);
 			String displayText = normalizedSubjectiveText(result.text().isBlank() ? result.rawResponse() : result.text());
-			logOcrResult(result);
-			textPane.setText(displayText);
-			saveCurrent();
-			QRSmallTipShow.display(MainWindow.INSTANCE, ocrProviderName(result.provider()) + " OCR 自动识别完成。");
-		} catch (Exception ex) {
-			logger.warning("Auto OCR failed: " + ex.getMessage());
-		} finally {
-			setCursorDefault();
+			return new OcrTaskResult(answerIndex, result, displayText, automatic);
+		});
+	}
+
+	private void applyOcrResult(int serial, OcrTaskResult taskResult) {
+		if (serial != ocrSerial || taskResult.answerIndex() != index) {
+			return;
+		}
+		setCursorDefault();
+		logOcrResult(taskResult.result());
+		textPane.setText(taskResult.displayText());
+		saveCurrent();
+		String suffix = taskResult.automatic() ? " OCR 自动识别完成。" : " OCR 识别完成。";
+		QRSmallTipShow.display(MainWindow.INSTANCE, ocrProviderName(taskResult.result().provider()) + suffix);
+	}
+
+	private void handleOcrError(int serial, boolean automatic, Throwable error) {
+		if (serial != ocrSerial) {
+			return;
+		}
+		setCursorDefault();
+		if (automatic) {
+			logger.warning("Auto OCR failed: " + error.getMessage());
+		} else {
+			QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "OCR 识别失败：\n" + error.getMessage());
 		}
 	}
 
@@ -477,14 +590,14 @@ public final class SubjectiveOcrReviewPanel extends QRPanel implements ProjectSt
 			   && !plainConfig(Keys.BAIDU_OCR_SECRET_KEY).isBlank();
 	}
 
-	private OcrResult recognizeBySelectedProvider() throws Exception {
+	private OcrResult recognizeBySelectedProvider(BufferedImage image) throws Exception {
 		String provider = selectedOcrProvider();
 		if ("google".equals(provider)) {
 			String apiKey = plainConfig(Keys.GOOGLE_OCR_API_KEY);
 			if (apiKey.isBlank()) {
 				throw new IllegalStateException("请先在 OCR 设置中填写 Google Vision API Key。");
 			}
-			GoogleVisionHandwritingOcr.Result result = GoogleVisionHandwritingOcr.recognizeJapaneseDocument(currentSubjectiveImage, apiKey);
+			GoogleVisionHandwritingOcr.Result result = GoogleVisionHandwritingOcr.recognizeJapaneseDocument(image, apiKey);
 			return new OcrResult(provider, result.rawResponse(), result.lines(), result.text());
 		}
 		String apiKey = plainConfig(Keys.BAIDU_OCR_API_KEY);
@@ -492,7 +605,7 @@ public final class SubjectiveOcrReviewPanel extends QRPanel implements ProjectSt
 		if (apiKey.isBlank() || secretKey.isBlank()) {
 			throw new IllegalStateException("请先在 OCR 设置中填写百度 OCR API Key 和 Secret Key。");
 		}
-		BaiduHandwritingOcr.Result result = BaiduHandwritingOcr.recognizeJapaneseHandwriting(currentSubjectiveImage, apiKey, secretKey);
+		BaiduHandwritingOcr.Result result = BaiduHandwritingOcr.recognizeJapaneseHandwriting(image, apiKey, secretKey);
 		return new OcrResult("baidu", result.rawResponse(), result.words(), result.text());
 	}
 
@@ -512,6 +625,13 @@ public final class SubjectiveOcrReviewPanel extends QRPanel implements ProjectSt
 	}
 
 	private record OcrResult(String provider, String rawResponse, List<String> items, String text) {
+	}
+
+	private record SubjectiveImageLoadResult(int answerIndex, File answerFile, BufferedImage image, String savedText,
+											 boolean autoOcr) {
+	}
+
+	private record OcrTaskResult(int answerIndex, OcrResult result, String displayText, boolean automatic) {
 	}
 
 	private void showOcrKeyDialog() {

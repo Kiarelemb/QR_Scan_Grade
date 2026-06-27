@@ -50,7 +50,7 @@ public class BubbleMarkReader {
 	 * @return 白色像素占比 (0.0 ~ 1.0)
 	 */
 	public double getFillRatio(Mat binary, Rect region) {
-		return BinaryRegionAnalyzer.bestWhiteRatioNear(binary, region,
+		return BinaryRegionAnalyzer.stableWhiteRatioNear(binary, region,
 				LOCAL_SEARCH_RADIUS_X, LOCAL_SEARCH_RADIUS_Y, LOCAL_SEARCH_STEP);
 	}
 

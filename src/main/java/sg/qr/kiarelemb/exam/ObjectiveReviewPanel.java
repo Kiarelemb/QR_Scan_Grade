@@ -1,7 +1,6 @@
 package sg.qr.kiarelemb.exam;
 
 import method.qr.kiarelemb.utils.QRStringUtils;
-import org.bytedeco.opencv.opencv_core.Mat;
 import org.bytedeco.opencv.opencv_core.Rect;
 import sg.qr.kiarelemb.MainWindow;
 import sg.qr.kiarelemb.component.AnswerSheetPreviewPanel;
@@ -22,7 +21,6 @@ import swing.qr.kiarelemb.utils.QRClearableTextField;
 import swing.qr.kiarelemb.window.enhance.QROpinionDialog;
 import swing.qr.kiarelemb.window.utils.QRValueInputDialog;
 
-import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.border.LineBorder;
 import javax.swing.event.DocumentEvent;
@@ -31,6 +29,7 @@ import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -69,7 +68,7 @@ public class ObjectiveReviewPanel extends QRPanel {
 	private boolean syncingAnswerText;
 	private boolean syncingAnswerTable;
 	private int answerLoadSerial;
-	private QRTaskWorker<AnswerLoadResult> answerLoadWorker;
+	private QRTaskWorker<AnswerReviewLoadTask.Result> answerLoadWorker;
 
 	private QRRoundButton previousButton;
 	private QRRoundButton nextButton;
@@ -283,7 +282,7 @@ public class ObjectiveReviewPanel extends QRPanel {
 		}
 		setAnswerLoading(true);
 		QRTaskOptions options = new QRTaskOptions()
-				.onSuccess((AnswerLoadResult result) -> applyAnswerLoadResult(serial, result))
+				.onSuccess((AnswerReviewLoadTask.Result result) -> applyAnswerLoadResult(serial, result))
 				.onError(error -> handleAnswerLoadError(serial, answerFile, error))
 				.onCancelled(() -> {
 					if (serial == answerLoadSerial) {
@@ -291,47 +290,10 @@ public class ObjectiveReviewPanel extends QRPanel {
 					}
 				});
 		answerLoadWorker = QRTaskRunner.run(options,
-				context -> {
-					context.message("正在读取答卷图片...");
-					BufferedImage image = ImageIO.read(answerFile);
-					context.checkCancelled();
-					context.message("正在预处理答卷...");
-					Mat binary = SheetImagePreprocessor.preprocess(answerFile);
-					context.checkCancelled();
-					context.message("正在校准答卷...");
-					SheetCalibrator.CalibrationResult calibration = SheetCalibrator.calibrate(binary, template, answerSheet);
-					context.checkCancelled();
-					SheetLayout loadedAnswerSheet = calibration.answerSheet();
-					SheetTemplate currentTemplate = new SheetTemplate(
-							template.name(),
-							template.pictureFile(),
-							loadedAnswerSheet,
-							calibration.examRegionRect(),
-							calibration.choiceRegionRect(),
-							calibration.fillBlankRegionRect(),
-							template.defaultScoreRules(),
-							template.pageCount());
-					GradingProject.ReviewedAnswer reviewedAnswer = project.reviewedAnswerFor(answerFile);
-					GradingOutcome recognizedResult = null;
-					GradingProject.ReviewedAnswer resultReview = reviewedAnswer;
-					if (reviewedAnswer == null) {
-						context.message("正在识别客观题...");
-						recognizedResult = withFixedExamIdPrefix(
-								comparator.grade(binary, loadedAnswerSheet, loadedAnswerSheet.getChoiceLabels()), loadedAnswerSheet);
-					} else if (!savedExamIdUsable(reviewedAnswer.examineeId())) {
-						context.message("正在复核准考证号...");
-						recognizedResult = withFixedExamIdPrefix(
-								comparator.grade(binary, loadedAnswerSheet, loadedAnswerSheet.getChoiceLabels()), loadedAnswerSheet);
-						if (recognizedResult != null && savedExamIdUsable(recognizedResult.examineeId())) {
-							resultReview = new GradingProject.ReviewedAnswer(recognizedResult.examineeId(), reviewedAnswer.answers());
-						}
-					}
-					return new AnswerLoadResult(answerIndex, answerFile, image, currentTemplate, loadedAnswerSheet,
-							recognizedResult, resultReview, reviewedAnswer == null);
-				});
+				new AnswerReviewLoadTask(project, template, answerSheet, comparator, answerFile, answerIndex));
 	}
 
-	private void applyAnswerLoadResult(int serial, AnswerLoadResult result) {
+	private void applyAnswerLoadResult(int serial, AnswerReviewLoadTask.Result result) {
 		if (serial != answerLoadSerial || result.answerIndex() != project.index()) {
 			return;
 		}
@@ -472,22 +434,6 @@ public class ObjectiveReviewPanel extends QRPanel {
 		syncCheckTextFromTable();
 	}
 
-	private GradingProject.ReviewedAnswer refreshInvalidSavedExamId(File answerFile, Mat binary, GradingProject.ReviewedAnswer reviewedAnswer) {
-		if (reviewedAnswer == null || savedExamIdUsable(reviewedAnswer.examineeId())) {
-			return reviewedAnswer;
-		}
-		GradingOutcome recognized = comparator.grade(binary, currentAnswerSheet, currentAnswerSheet.getChoiceLabels());
-		recognized = withFixedExamIdPrefix(recognized);
-		if (!savedExamIdUsable(recognized.examineeId())) {
-			currentResult = recognized;
-			return reviewedAnswer;
-		}
-		GradingProject.ReviewedAnswer corrected = new GradingProject.ReviewedAnswer(recognized.examineeId(), reviewedAnswer.answers());
-		project.putReviewedAnswer(answerFile, corrected.examineeId(), corrected.answers());
-		project.write();
-		return corrected;
-	}
-
 	private boolean savedExamIdUsable(String examineeId) {
 		String value = examineeId == null ? "" : examineeId.trim();
 		if (value.isEmpty()) {
@@ -495,35 +441,6 @@ public class ObjectiveReviewPanel extends QRPanel {
 		}
 		Map<String, String> names = project.studentNamesByExamId();
 		return names == null || names.isEmpty() || names.containsKey(value);
-	}
-
-	private GradingOutcome withFixedExamIdPrefix(GradingOutcome result) {
-		return withFixedExamIdPrefix(result, currentAnswerSheet);
-	}
-
-	private GradingOutcome withFixedExamIdPrefix(GradingOutcome result, SheetLayout sheetLayout) {
-		if (result == null) {
-			return null;
-		}
-		String fixedPrefix = project.examIdPrefix();
-		if (fixedPrefix.isBlank()) {
-			return result;
-		}
-		String recognized = result.examineeId() == null ? "" : result.examineeId().trim();
-		String suffix = recognized.length() > fixedPrefix.length() ? recognized.substring(fixedPrefix.length()) : "";
-		int expectedDigits = sheetLayout == null ? 0 : sheetLayout.getExamIdDigits();
-		int suffixDigits = expectedDigits <= 0 ? suffix.length() : Math.max(0, expectedDigits - fixedPrefix.length());
-		if (suffix.length() > suffixDigits) {
-			suffix = suffix.substring(suffix.length() - suffixDigits);
-		}
-		while (suffix.length() < suffixDigits) {
-			suffix += "?";
-		}
-		String corrected = fixedPrefix + suffix;
-		if (corrected.equals(recognized)) {
-			return result;
-		}
-		return new GradingOutcome(corrected, result.sheetName(), result.questionResults(), result.totalScore(), result.earnedScore());
 	}
 
 	private String[] splitSavedAnswers(String answers) {
@@ -632,6 +549,17 @@ public class ObjectiveReviewPanel extends QRPanel {
 		if (!saveCurrentReview()) {
 			return;
 		}
+		if (isCtrlDown(event)) {
+			if (allChoiceReviewsSaved()) {
+				project.setIndex(project.answerFiles().size());
+				project.write();
+				removeShortcuts();
+				MainWindow.INSTANCE.showAfterChoiceReview(project);
+			} else {
+				QROpinionDialog.messageTellShow(MainWindow.INSTANCE, "还有答卷未完成选择题校对，不能直接进入后续。");
+			}
+			return;
+		}
 		if (isLastAnswer()) {
 			project.setIndex(project.answerFiles().size());
 			project.write();
@@ -688,6 +616,27 @@ public class ObjectiveReviewPanel extends QRPanel {
 			   && project.index() >= project.answerFiles().size() - 1;
 	}
 
+	private boolean allChoiceReviewsSaved() {
+		if (project.answerFiles() == null || project.answerFiles().isEmpty()) {
+			return false;
+		}
+		for (File answerFile : project.answerFiles()) {
+			GradingProject.ReviewedAnswer reviewedAnswer = project.reviewedAnswerFor(answerFile);
+			if (reviewedAnswer == null
+				|| reviewedAnswer.examineeId() == null
+				|| reviewedAnswer.examineeId().isBlank()
+				|| reviewedAnswer.answers() == null
+				|| reviewedAnswer.answers().isBlank()) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private boolean isCtrlDown(ActionEvent event) {
+		return event != null && (event.getModifiers() & (InputEvent.CTRL_DOWN_MASK | InputEvent.CTRL_MASK)) != 0;
+	}
+
 	private boolean saveCurrentReview() {
 		if (currentResult == null) {
 			return false;
@@ -725,11 +674,6 @@ public class ObjectiveReviewPanel extends QRPanel {
 		}
 		SheetLayout sheet = currentAnswerSheet == null ? answerSheet : currentAnswerSheet;
 		return sheet != null && sheet.getChoiceQuestions().stream().anyMatch(question -> question.number() == number.intValue());
-	}
-
-	private record AnswerLoadResult(int answerIndex, File answerFile, BufferedImage image, SheetTemplate template,
-									SheetLayout answerSheet, GradingOutcome recognizedResult,
-									GradingProject.ReviewedAnswer reviewedAnswer, boolean newRecognition) {
 	}
 
 	private static final class ResultCellRenderer extends DefaultTableCellRenderer {

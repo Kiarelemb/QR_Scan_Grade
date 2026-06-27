@@ -88,7 +88,7 @@ public class AnswerRegionBuilder {
 			int choiceTotal, int choiceStartX, int choiceStartY,
 			int choiceBubbleW, int choiceBubbleH, int choiceHGap, int choiceVGap,
 			int choiceRows, int[] choiceColsPerRow, int[] choiceRowStartYs, int[] choiceColStartXs,
-			int[] choiceQuestionsPerCol, int choiceOptionCount,
+			int[] choiceQuestionsPerCol, int[] choiceOptionCountsPerCol, int choiceOptionCount,
 			int fillBlankCount, int fillStartX, int fillStartY,
 			int fillBoxW, int fillBoxH,
 			String[] correctAnswers) {
@@ -125,12 +125,13 @@ public class AnswerRegionBuilder {
 			for (int c = 0; c < colsInRow; c++) {
 				int startX = choiceColStartXs[colIdx];
 				int questionsInCol = choiceQuestionsPerCol[colIdx];
+				int optionCountInCol = optionCountForColumn(choiceOptionCountsPerCol, colIdx, choiceOptionCount);
 
 				for (int q = 0; q < questionsInCol; q++) {
 					int currentY = rowY + q * choiceVGap;
 
 					List<Rect> regions = new ArrayList<>();
-					for (int opt = 0; opt < choiceOptionCount; opt++) {
+					for (int opt = 0; opt < optionCountInCol; opt++) {
 						int x = startX + opt * choiceHGap;
 						regions.add(new Rect(x, currentY, choiceBubbleW, choiceBubbleH));
 					}
@@ -151,5 +152,13 @@ public class AnswerRegionBuilder {
 		}
 
 		return new SheetLayout(sheetName, imgW, imgH, examIdDigits, allQuestions);
+	}
+
+	private static int optionCountForColumn(int[] choiceOptionCountsPerCol, int colIdx, int fallback) {
+		int optionCount = fallback;
+		if (choiceOptionCountsPerCol != null && colIdx >= 0 && colIdx < choiceOptionCountsPerCol.length) {
+			optionCount = choiceOptionCountsPerCol[colIdx];
+		}
+		return Math.max(2, Math.min(SheetLayout.CHOICE_LABELS.length, optionCount));
 	}
 }

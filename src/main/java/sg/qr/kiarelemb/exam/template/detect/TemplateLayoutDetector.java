@@ -83,6 +83,7 @@ public class TemplateLayoutDetector {
 	 */
 	public int[] choiceColStartXs;
 	public int[] choiceQuestionsPerCol;
+	public int[] choiceOptionCountsPerCol;
 
 	// ==================== 主入口 ====================
 
@@ -135,20 +136,10 @@ public class TemplateLayoutDetector {
 		}
 
 		// 1. 提取大框（用于填空题）
-		// 2. 提取气泡框参数
-		Map<String, Integer> sizeMap = new HashMap<>();
-		for (DetectedBox r : allRects) {
-			if (!TemplateLayoutDetectorUtils.isBubbleCandidate(r)) continue;
-			String key = r.w + "x" + r.h;
-			sizeMap.put(key, sizeMap.getOrDefault(key, 0) + 1);
-		}
-		String mostCommonSize = sizeMap.entrySet().stream()
-				.max(Map.Entry.comparingByValue())
-				.map(Map.Entry::getKey)
-				.orElse("44x28");
-		String[] sizes = mostCommonSize.split("x");
-		int bubbleW = Integer.parseInt(sizes[0]);
-		int bubbleH = Integer.parseInt(sizes[1]);
+		// 2. 提取气泡框参数。优先选真正的填涂外框，避免题号/选项文字轮廓成为众数。
+		int[] bubbleSize = inferMarkBoxSize();
+		int bubbleW = bubbleSize[0];
+		int bubbleH = bubbleSize[1];
 
 		this.examBubbleW = bubbleW;
 		this.examBubbleH = bubbleH;
@@ -157,9 +148,17 @@ public class TemplateLayoutDetector {
 
 		// 3. 先按列聚类，识别考号（竖排10个）
 		Map<Integer, List<Integer>> colGroups = new LinkedHashMap<>();
+		List<DetectedBox> examCandidates = new ArrayList<>();
 		for (DetectedBox r : allRects) {
 			if (Math.abs(r.w - bubbleW) > 10 || Math.abs(r.h - bubbleH) > 10) continue;
-			int colKey = (r.cx / 10) * 10;
+			examCandidates.add(r);
+		}
+		List<Integer> xClusters = SheetGeometryUtils.clusterValues(
+				examCandidates.stream().mapToInt(r -> r.cx).toArray(), 25);
+		for (DetectedBox r : examCandidates) {
+			int colKey = xClusters.stream()
+					.min(Comparator.comparingInt(k -> Math.abs(k - r.cx)))
+					.orElse(r.cx);
 			colGroups.computeIfAbsent(colKey, k -> new ArrayList<>()).add(r.cy);
 		}
 		List<Integer> sortedCols = new ArrayList<>(colGroups.keySet());
@@ -170,7 +169,8 @@ public class TemplateLayoutDetector {
 		// 找出所有含10个均匀分布矩形的列
 		List<Integer> examColXs = new ArrayList<>();
 		for (int colKey : sortedCols) {
-			List<Integer> yCoords = colGroups.get(colKey);
+			List<Integer> yCoords = SheetGeometryUtils.clusterValues(
+					colGroups.get(colKey).stream().mapToInt(Integer::intValue).toArray(), 20);
 			if (yCoords.size() >= 10) {
 				Collections.sort(yCoords);
 				// 取前10个计算间距
@@ -219,7 +219,8 @@ public class TemplateLayoutDetector {
 			this.examHGap = medianGap; // 中心到中心间距
 
 			// 用第一列的Y信息计算垂直参数
-			List<Integer> firstColY = colGroups.get(validCols.get(0));
+			List<Integer> firstColY = SheetGeometryUtils.clusterValues(
+					colGroups.get(validCols.get(0)).stream().mapToInt(Integer::intValue).toArray(), 20);
 			Collections.sort(firstColY);
 			this.examStartY = firstColY.get(0) - bubbleH / 2;
 			this.examVGap = firstColY.get(1) - firstColY.get(0); // 中心到中心间距
@@ -302,6 +303,47 @@ public class TemplateLayoutDetector {
 		inferChoiceColumns(rowGroups, sortedRows, bubbleW, bubbleH);
 	}
 
+	private int[] inferMarkBoxSize() {
+		Map<String, Integer> preferredSizeMap = new HashMap<>();
+		Map<String, Integer> fallbackSizeMap = new HashMap<>();
+		for (DetectedBox r : allRects) {
+			if (!TemplateLayoutDetectorUtils.isBubbleCandidate(r)) continue;
+			String key = r.w + "x" + r.h;
+			fallbackSizeMap.put(key, fallbackSizeMap.getOrDefault(key, 0) + 1);
+
+			double aspect = (double) r.w / Math.max(1, r.h);
+			boolean markBoxLike = r.w >= 35 && r.w <= 55
+								  && r.h >= 20 && r.h <= 35
+								  && aspect >= 1.25 && aspect <= 2.2;
+			if (markBoxLike) {
+				preferredSizeMap.put(key, preferredSizeMap.getOrDefault(key, 0) + 1);
+			}
+		}
+		String size = mostCommonSize(preferredSizeMap, 12);
+		if (size == null) {
+			size = mostCommonSize(fallbackSizeMap, 1);
+		}
+		if (size == null) {
+			size = "44x28";
+		}
+		String[] parts = size.split("x");
+		return new int[]{Integer.parseInt(parts[0]), Integer.parseInt(parts[1])};
+	}
+
+	private String mostCommonSize(Map<String, Integer> sizeMap, int minCount) {
+		return sizeMap.entrySet().stream()
+				.filter(entry -> entry.getValue() >= minCount)
+				.max(Comparator.<Map.Entry<String, Integer>>comparingInt(Map.Entry::getValue)
+						.thenComparingInt(entry -> sizeArea(entry.getKey())))
+				.map(Map.Entry::getKey)
+				.orElse(null);
+	}
+
+	private int sizeArea(String size) {
+		String[] parts = size.split("x");
+		return Integer.parseInt(parts[0]) * Integer.parseInt(parts[1]);
+	}
+
 	/**
 	 * 从已检测的矩形中推断选择题的列X坐标和行Y坐标。
 	 * 核心思路：在同一行内，连续的气泡间距<100px属于同一题组选项，间距>100px表示新的一列。
@@ -312,10 +354,12 @@ public class TemplateLayoutDetector {
 		class RowInfo {
 			final int y;
 			final List<Integer> colStarts;
+			final List<Integer> optionCounts;
 
-			RowInfo(int y, List<Integer> colStarts) {
+			RowInfo(int y, List<Integer> colStarts, List<Integer> optionCounts) {
 				this.y = y;
 				this.colStarts = colStarts;
+				this.optionCounts = optionCounts;
 			}
 		}
 
@@ -338,9 +382,9 @@ public class TemplateLayoutDetector {
 				colStarts.add(choiceGroup[0]);
 				optionCounts.add(choiceGroup[1]);
 			}
-				if (!colStarts.isEmpty()) {
+			if (!colStarts.isEmpty()) {
 				detectedOptionCounts.addAll(optionCounts);
-				rowInfos.add(new RowInfo(rowKey - bubbleH / 2, colStarts));
+				rowInfos.add(new RowInfo(rowKey - bubbleH / 2, colStarts, optionCounts));
 			}
 		}
 		if (!detectedOptionCounts.isEmpty()) {
@@ -353,6 +397,7 @@ public class TemplateLayoutDetector {
 			this.choiceRowStartYs = new int[0];
 			this.choiceColStartXs = new int[0];
 			this.choiceQuestionsPerCol = new int[0];
+			this.choiceOptionCountsPerCol = new int[0];
 			return;
 		}
 
@@ -383,6 +428,7 @@ public class TemplateLayoutDetector {
 		this.choiceColsPerRow = new int[choiceRows];
 		List<Integer> flatXs = new ArrayList<>();
 		List<Integer> flatCounts = new ArrayList<>();
+		List<Integer> flatOptionCounts = new ArrayList<>();
 		List<Integer> referenceColXs = Collections.emptyList();
 
 		for (int i = 0; i < bands.size(); i++) {
@@ -410,12 +456,18 @@ public class TemplateLayoutDetector {
 				// 统计每列出现在几行中，舍弃仅出现在 ≤1 行的噪声列
 				List<Integer> validColXs = new ArrayList<>();
 				List<Integer> validCounts = new ArrayList<>();
+				List<Integer> validOptionCounts = new ArrayList<>();
 				for (int colX : bandCols) {
 					int count = 0;
+					List<Integer> columnOptionCounts = new ArrayList<>();
 					for (RowInfo row : band) {
-						for (int x : row.colStarts) {
+						for (int j = 0; j < row.colStarts.size(); j++) {
+							int x = row.colStarts.get(j);
 							if (Math.abs(x - colX) <= mergeTol) {
 								count++;
+								if (j < row.optionCounts.size()) {
+									columnOptionCounts.add(row.optionCounts.get(j));
+								}
 								break;
 							}
 						}
@@ -423,18 +475,24 @@ public class TemplateLayoutDetector {
 					if (count >= 2) {
 						validColXs.add(colX);
 						validCounts.add(count);
+						validOptionCounts.add(columnOptionCounts.isEmpty()
+								? choiceOptionCount
+								: SheetGeometryUtils.dominantCount(columnOptionCounts));
 					}
 				}
 				if (!referenceColXs.isEmpty() && validColXs.size() > referenceColXs.size()) {
 					List<Integer> keepIndexes = SheetGeometryUtils.closestColumnIndexes(validColXs, referenceColXs);
 					List<Integer> filteredColXs = new ArrayList<>();
 					List<Integer> filteredCounts = new ArrayList<>();
+					List<Integer> filteredOptionCounts = new ArrayList<>();
 					for (int index : keepIndexes) {
 						filteredColXs.add(validColXs.get(index));
 						filteredCounts.add(validCounts.get(index));
+						filteredOptionCounts.add(validOptionCounts.get(index));
 					}
 					validColXs = filteredColXs;
 					validCounts = filteredCounts;
+					validOptionCounts = filteredOptionCounts;
 				}
 				if (referenceColXs.isEmpty() && validColXs.size() >= 2) {
 					referenceColXs = new ArrayList<>(validColXs);
@@ -442,10 +500,12 @@ public class TemplateLayoutDetector {
 				this.choiceColsPerRow[i] = validColXs.size();
 				flatXs.addAll(validColXs);
 				flatCounts.addAll(validCounts);
+				flatOptionCounts.addAll(validOptionCounts);
 		}
 
 		this.choiceColStartXs = flatXs.stream().mapToInt(Integer::intValue).toArray();
 		this.choiceQuestionsPerCol = flatCounts.stream().mapToInt(Integer::intValue).toArray();
+		this.choiceOptionCountsPerCol = flatOptionCounts.stream().mapToInt(Integer::intValue).toArray();
 
 		// 用首行柱参考过滤后续行的噪声柱
 		if (choiceRows > 1 && choiceColsPerRow[0] >= 3) {
@@ -453,6 +513,7 @@ public class TemplateLayoutDetector {
 			int[] firstCols = java.util.Arrays.copyOfRange(choiceColStartXs, 0, choiceColsPerRow[0]);
 			int[] newStarts = new int[choiceColStartXs.length];
 			int[] newCounts = new int[choiceQuestionsPerCol.length];
+			int[] newOptionCounts = new int[choiceOptionCountsPerCol.length];
 			int n = 0;
 			for (int row = 0, idx = 0; row < choiceRows; row++) {
 				int kept = 0;
@@ -464,6 +525,7 @@ public class TemplateLayoutDetector {
 					if (match) {
 						newStarts[n] = choiceColStartXs[idx];
 						newCounts[n] = choiceQuestionsPerCol[idx];
+						newOptionCounts[n] = idx < choiceOptionCountsPerCol.length ? choiceOptionCountsPerCol[idx] : choiceOptionCount;
 						n++; kept++;
 					}
 				}
@@ -471,6 +533,7 @@ public class TemplateLayoutDetector {
 			}
 			choiceColStartXs = java.util.Arrays.copyOf(newStarts, n);
 			choiceQuestionsPerCol = java.util.Arrays.copyOf(newCounts, n);
+			choiceOptionCountsPerCol = java.util.Arrays.copyOf(newOptionCounts, n);
 		}
 
 		logger.info("========== 选择题布局结构 ==========");
@@ -488,7 +551,9 @@ public class TemplateLayoutDetector {
 				rowLog.append(choiceColStartXs[base + j])
 						.append("/")
 						.append(choiceQuestionsPerCol[base + j])
-						.append("题");
+						.append("题/")
+						.append(base + j < choiceOptionCountsPerCol.length ? choiceOptionCountsPerCol[base + j] : choiceOptionCount)
+						.append("选项");
 			}
 			base += choiceColsPerRow[i];
 			rowLog.append("]");
@@ -532,7 +597,7 @@ public class TemplateLayoutDetector {
 				choiceBubbleW, choiceBubbleH, choiceHGap, choiceVGap,
 				// 选择题布局结构
 				choiceRows, choiceColsPerRow, choiceRowStartYs, choiceColStartXs,
-				choiceQuestionsPerCol, choiceOptionCount,
+				choiceQuestionsPerCol, choiceOptionCountsPerCol, choiceOptionCount,
 				// 填空题参数
 				fillBlankCount, fillStartX, fillStartY,
 				fillBoxW, fillBoxH,

@@ -1,8 +1,6 @@
 package sg.qr.kiarelemb.exam.results;
 
-import org.bytedeco.opencv.opencv_core.Rect;
 import sg.qr.kiarelemb.MainWindow;
-import sg.qr.kiarelemb.component.ManualScoreReviewDialog;
 import sg.qr.kiarelemb.data.Utils;
 import sg.qr.kiarelemb.exam.ManualScoringPanel;
 import sg.qr.kiarelemb.exam.model.GradingProject;
@@ -14,7 +12,11 @@ import sg.qr.kiarelemb.exam.scoring.ScaledScoreConfigDialog;
 import sg.qr.kiarelemb.exam.scoring.ScoreSection;
 import sg.qr.kiarelemb.menu.data.EnglishScoreInput;
 import swing.qr.kiarelemb.basic.*;
+import swing.qr.kiarelemb.task.QRTaskOptions;
+import swing.qr.kiarelemb.task.QRTaskRunner;
+import swing.qr.kiarelemb.task.QRTaskWorker;
 import swing.qr.kiarelemb.theme.QRColorsAndFonts;
+import swing.qr.kiarelemb.window.basic.QRDialog;
 import swing.qr.kiarelemb.window.enhance.QROpinionDialog;
 
 import javax.swing.*;
@@ -67,6 +69,10 @@ public class ResultsPanel extends QRPanel {
 	private List<String> exportRows = new ArrayList<>();
 	private QuestionScorePolicy.ScaleScoreReport lastScaleReport;
 	private boolean lastResultScaleMode = false;
+	private QRTaskWorker<PreviewResult> previewWorker;
+	private QRTaskWorker<CalculateResult> calculateWorker;
+	private int previewSerial;
+	private int calculateSerial;
 
 	public ResultsPanel(GradingProject project) {
 		this.project = project;
@@ -131,10 +137,6 @@ public class ResultsPanel extends QRPanel {
 		QRRoundButton previewButton = new QRRoundButton("预览分值");
 		previewButton.setPreferredSize(new Dimension(100, 30));
 		previewButton.addClickAction(this::previewScores);
-		QRRoundButton manualScoreButton = new QRRoundButton("录入人工分");
-		manualScoreButton.setPreferredSize(new Dimension(110, 30));
-		manualScoreButton.addClickAction(this::editManualScores);
-		buttonPanel.add(manualScoreButton);
 		buttonPanel.add(previewButton);
 		panel.add(buttonPanel, BorderLayout.SOUTH);
 		return panel;
@@ -164,6 +166,10 @@ public class ResultsPanel extends QRPanel {
 		panel.add(summaryLabel, BorderLayout.CENTER);
 
 		QRPanel buttonPanel = new QRPanel(false, new FlowLayout(FlowLayout.RIGHT, 8, 0));
+		QRRoundButton verifyExamIdButton = new QRRoundButton("校对考号");
+		verifyExamIdButton.setPreferredSize(new Dimension(110, 30));
+		verifyExamIdButton.addClickAction(this::verifyExamineeIds);
+		buttonPanel.add(verifyExamIdButton);
 		buttonPanel.add(FinishProjectButton.END_PROJECT);
 		buttonPanel.add(BackToReviewButton.BACK_TO_REVIEW_BUTTON);
 		buttonPanel.add(ExportResultsButton.EXPORT_SCORES_BUTTON);
@@ -203,7 +209,7 @@ public class ResultsPanel extends QRPanel {
 		}
 	}
 
-	private void saveDefaultRulesToTemplate() {
+	private void saveDefaultRulesToTemplate(String rulesText) {
 		try {
 			File templateFile = new File(project.templateFilePath());
 			SheetTemplate template = SheetTemplateFileStore.load(templateFile);
@@ -214,7 +220,7 @@ public class ResultsPanel extends QRPanel {
 					template.examRegionRect(),
 					template.choiceRegionRect(),
 					template.fillBlankRegionRect(),
-					ruleTextPane.getText(),
+					rulesText,
 					template.pageCount(),
 					template.subjectiveRegions(),
 					template.pictureFiles());
@@ -225,50 +231,128 @@ public class ResultsPanel extends QRPanel {
 	}
 
 	private void previewScores(ActionEvent event) {
-		try {
-			this.scorePlan = MODE_SCALE.equals(scoreModeBox.getSelectedItem())
-					? buildScaleScorePlan()
-					: parseNormalScorePlan(ruleTextPane.getText(), scoreRuleQuestionCount());
-			saveDefaultRulesToTemplate();
-			renderQuestionScores(this.scorePlan);
-			renderResultColumns(this.scorePlan.sectionNames());
-			summaryLabel.setText("分值预览完成，满分 " + Utils.formatScore(this.scorePlan.totalScore()) + "。");
-		} catch (ScoreRuleException ex) {
+		startPreviewTask();
+	}
+
+	private void startPreviewTask() {
+		int serial = ++previewSerial;
+		if (previewWorker != null && !previewWorker.isDone()) {
+			previewWorker.cancel(true);
+		}
+		String mode = String.valueOf(scoreModeBox.getSelectedItem());
+		String rulesText = ruleTextPane.getText();
+		QuestionScorePolicy.Config config = scaleConfig;
+		setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+		summaryLabel.setText("正在预览分值...");
+		QRTaskOptions options = new QRTaskOptions()
+				.onSuccess((PreviewResult result) -> applyPreviewResult(serial, result))
+				.onError(error -> handleScoreTaskError(serial, true, error))
+				.onCancelled(() -> {
+					if (serial == previewSerial) {
+						setCursor(Cursor.getDefaultCursor());
+					}
+				});
+		previewWorker = QRTaskRunner.run(options, context -> {
+			context.message("正在解析计分规则...");
+			ScoringPlan plan = MODE_SCALE.equals(mode)
+					? buildScaleScorePlan(calculateScaleScoreReport(config, rulesText), rulesText)
+					: parseNormalScorePlan(rulesText, scoreRuleQuestionCount(rulesText));
+			saveDefaultRulesToTemplate(rulesText);
+			return new PreviewResult(plan);
+		});
+	}
+
+	private void applyPreviewResult(int serial, PreviewResult result) {
+		if (serial != previewSerial) {
+			return;
+		}
+		setCursor(Cursor.getDefaultCursor());
+		this.scorePlan = result.scorePlan();
+		renderQuestionScores(this.scorePlan);
+		renderResultColumns(this.scorePlan.sectionNames());
+		summaryLabel.setText("分值预览完成，满分 " + Utils.formatScore(this.scorePlan.totalScore()) + "。");
+	}
+
+	private void handleScoreTaskError(int serial, boolean previewTask, Throwable error) {
+		if ((previewTask && serial != previewSerial) || (!previewTask && serial != calculateSerial)) {
+			return;
+		}
+		setCursor(Cursor.getDefaultCursor());
+		if (error instanceof ScoreRuleException ex) {
 			showScoreRuleError(ex);
-		} catch (IllegalArgumentException ex) {
+		} else if (error instanceof IllegalArgumentException ex) {
 			QROpinionDialog.messageErrShow(MainWindow.INSTANCE, ex.getMessage());
+		} else {
+			QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "成绩处理失败：\n" + error.getMessage());
 		}
 	}
 
+	private void verifyExamineeIds(ActionEvent event) {
+		new ExamineeIdVerifyDialog().setVisible(true);
+	}
+
 	void calculateScores(ActionEvent event) {
-		try {
-			if (MODE_SCALE.equals(scoreModeBox.getSelectedItem())) {
-				QuestionScorePolicy.ScaleScoreReport report = showScaleScoreDialog();
-				if (report == null) {
-					return;
-				}
-				this.scorePlan = buildScaleScorePlan(report);
-				this.scoreResults = applyManualScores(toScoreResults(report.studentScores(), this.scorePlan), this.scorePlan);
-				this.lastScaleReport = report;
-				this.lastResultScaleMode = true;
-			} else {
-				this.scorePlan = parseNormalScorePlan(ruleTextPane.getText(), scoreRuleQuestionCount());
-				this.scoreResults = applyManualScores(enrichStudentInfo(Utils.calculateNormalScores(project, this.scorePlan)), this.scorePlan);
-				this.lastScaleReport = null;
-				this.lastResultScaleMode = false;
+		String mode = String.valueOf(scoreModeBox.getSelectedItem());
+		QuestionScorePolicy.ScaleScoreReport scaleReport = null;
+		if (MODE_SCALE.equals(mode)) {
+			scaleReport = showScaleScoreDialog();
+			if (scaleReport == null) {
+				return;
 			}
-			saveDefaultRulesToTemplate();
-			this.exportRows = Utils.buildExportRows(project);
-			renderQuestionScores(this.scorePlan);
-			renderResultColumns(this.scorePlan.sectionNames());
-			renderScoreResults(this.scoreResults, this.scorePlan.sectionNames());
-			FinishProjectButton.END_PROJECT.setEnabled(true);
-			summaryLabel.setText("成绩计算完成：" + scoreResults.size() + " 人，导出行 " + exportRows.size() + " 条。");
-		} catch (ScoreRuleException ex) {
-			showScoreRuleError(ex);
-		} catch (IllegalArgumentException ex) {
-			QROpinionDialog.messageErrShow(MainWindow.INSTANCE, ex.getMessage());
 		}
+		startCalculateTask(mode, ruleTextPane.getText(), scaleReport);
+	}
+
+	private void startCalculateTask(String mode, String rulesText, QuestionScorePolicy.ScaleScoreReport scaleReport) {
+		int serial = ++calculateSerial;
+		if (calculateWorker != null && !calculateWorker.isDone()) {
+			calculateWorker.cancel(true);
+		}
+		setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+		summaryLabel.setText("正在计算成绩...");
+		QRTaskOptions options = new QRTaskOptions()
+				.onSuccess((CalculateResult result) -> applyCalculateResult(serial, result))
+				.onError(error -> handleScoreTaskError(serial, false, error))
+				.onCancelled(() -> {
+					if (serial == calculateSerial) {
+						setCursor(Cursor.getDefaultCursor());
+					}
+				});
+		calculateWorker = QRTaskRunner.run(options, context -> {
+			context.message("正在计算成绩...");
+			ScoringPlan plan;
+			List<ScoreOutcome> results;
+			QuestionScorePolicy.ScaleScoreReport report = null;
+			boolean scaleMode = MODE_SCALE.equals(mode);
+			if (scaleMode) {
+				report = scaleReport;
+				plan = buildScaleScorePlan(report, rulesText);
+				results = applyManualScores(toScoreResults(report.studentScores(), plan), plan, rulesText);
+			} else {
+				plan = parseNormalScorePlan(rulesText, scoreRuleQuestionCount(rulesText));
+				results = applyManualScores(enrichStudentInfo(Utils.calculateNormalScores(project, plan)), plan, rulesText);
+			}
+			saveDefaultRulesToTemplate(rulesText);
+			List<String> rows = Utils.buildExportRows(project);
+			return new CalculateResult(plan, results, rows, report, scaleMode);
+		});
+	}
+
+	private void applyCalculateResult(int serial, CalculateResult result) {
+		if (serial != calculateSerial) {
+			return;
+		}
+		setCursor(Cursor.getDefaultCursor());
+		this.scorePlan = result.scorePlan();
+		this.scoreResults = result.scoreResults();
+		this.exportRows = result.exportRows();
+		this.lastScaleReport = result.scaleReport();
+		this.lastResultScaleMode = result.scaleMode();
+		renderQuestionScores(this.scorePlan);
+		renderResultColumns(this.scorePlan.sectionNames());
+		renderScoreResults(this.scoreResults, this.scorePlan.sectionNames());
+		FinishProjectButton.END_PROJECT.setEnabled(true);
+		summaryLabel.setText("成绩计算完成：" + scoreResults.size() + " 人，导出行 " + exportRows.size() + " 条。");
 	}
 
 	private void loadEntranceEnglishScores() {
@@ -279,136 +363,6 @@ public class ResultsPanel extends QRPanel {
 			if (score != null) {
 				entranceEnglishScores.put(entry.getKey(), score);
 			}
-		}
-	}
-
-	private void editManualScores(ActionEvent event) {
-		try {
-			ScoringPlan plan = parseNormalScorePlan(ruleTextPane.getText(), scoreRuleQuestionCount());
-			List<ScorePolicy> manualRules = manualScoreRules(plan);
-			if (manualRules.isEmpty()) {
-				QROpinionDialog.messageTellShow(MainWindow.INSTANCE, "当前计分规则中没有人工评分题。\n人工评分题号应写在机判题号之后。");
-				return;
-			}
-			new ManualScoreReviewDialog(MainWindow.INSTANCE, "录入人工分",
-					manualScoreEntries(),
-					manualRules.stream()
-							.map(rule -> new ManualScoreReviewDialog.ScoreItem(rule.questionType(), rule.totalScore()))
-							.toList(),
-					manualRegion(),
-					new ManualScoreReviewDialog.ScoreStore() {
-						@Override
-						public Map<String, String> load(ManualScoreReviewDialog.Entry entry) {
-							return project.manualScoresFor(entry.examineeId());
-						}
-
-						@Override
-						public void save(ManualScoreReviewDialog.Entry entry, Map<String, String> scores) {
-							for (Map.Entry<String, String> score : scores.entrySet()) {
-								project.putManualScore(entry.examineeId(), score.getKey(), score.getValue());
-							}
-							project.write();
-						}
-					}).setVisible(true);
-		} catch (ScoreRuleException ex) {
-			showScoreRuleError(ex);
-		} catch (IllegalArgumentException ex) {
-			QROpinionDialog.messageErrShow(MainWindow.INSTANCE, ex.getMessage());
-		}
-	}
-
-	private List<ManualScoreReviewDialog.Entry> manualScoreEntries() {
-		if (project.answerFiles() == null) {
-			return List.of();
-		}
-		List<ManualScoreReviewDialog.Entry> entries = new ArrayList<>();
-		Map<String, String> names = project.studentNamesByExamId();
-		for (File answerFile : project.answerFiles()) {
-			GradingProject.ReviewedAnswer reviewedAnswer = project.reviewedAnswerFor(answerFile);
-			if (reviewedAnswer != null && reviewedAnswer.examineeId() != null && !reviewedAnswer.examineeId().isBlank()) {
-				entries.add(new ManualScoreReviewDialog.Entry(manualScoreImageFile(answerFile),
-						reviewedAnswer.examineeId(),
-						names.getOrDefault(reviewedAnswer.examineeId(), "")));
-			}
-		}
-		return entries;
-	}
-
-	private File manualScoreImageFile(File answerFile) {
-		if (manualRegionPageIndex() <= 0) {
-			return answerFile;
-		}
-		File backFile = project.answerBackFileFor(answerFile);
-		return backFile == null ? answerFile : backFile;
-	}
-
-	private int manualRegionPageIndex() {
-		try {
-			SheetTemplate template = SheetTemplateFileStore.load(new File(project.templateFilePath()));
-			for (SubjectiveAnswerRegion region : template.subjectiveRegions()) {
-				if (region.mode() == SubjectiveAnswerRegion.GradingMode.MANUAL
-					|| region.mode() == SubjectiveAnswerRegion.GradingMode.MIXED) {
-					return region.pageIndex();
-				}
-			}
-		} catch (IOException ignored) {
-		}
-		return 0;
-	}
-
-	private Rect manualRegion() {
-		try {
-			SheetTemplate template = SheetTemplateFileStore.load(new File(project.templateFilePath()));
-			return manualRegion(template);
-		} catch (IOException ex) {
-			return null;
-		}
-	}
-
-	private Rect manualRegion(SheetTemplate template) {
-		List<Rect> regions = new ArrayList<>();
-		for (SubjectiveAnswerRegion region : template.subjectiveRegions()) {
-			if (region.mode() == SubjectiveAnswerRegion.GradingMode.MANUAL
-				|| region.mode() == SubjectiveAnswerRegion.GradingMode.MIXED) {
-				regions.add(region.region());
-			}
-		}
-		if (regions.isEmpty() && template.fillBlankRegionRect() != null) {
-			regions.add(template.fillBlankRegionRect());
-		}
-		return boundingRect(regions);
-	}
-
-	private Rect boundingRect(List<Rect> regions) {
-		if (regions == null || regions.isEmpty()) {
-			return null;
-		}
-		int minX = Integer.MAX_VALUE;
-		int minY = Integer.MAX_VALUE;
-		int maxX = Integer.MIN_VALUE;
-		int maxY = Integer.MIN_VALUE;
-		for (Rect rect : regions) {
-			minX = Math.min(minX, rect.x());
-			minY = Math.min(minY, rect.y());
-			maxX = Math.max(maxX, rect.x() + rect.width());
-			maxY = Math.max(maxY, rect.y() + rect.height());
-		}
-		return new Rect(minX, minY, maxX - minX, maxY - minY);
-	}
-
-	private void previewScores() {
-		try {
-			this.scorePlan = MODE_SCALE.equals(scoreModeBox.getSelectedItem())
-					? buildScaleScorePlan()
-					: parseNormalScorePlan(ruleTextPane.getText(), scoreRuleQuestionCount());
-			saveDefaultRulesToTemplate();
-			renderQuestionScores(this.scorePlan);
-			renderResultColumns(this.scorePlan.sectionNames());
-			summaryLabel.setText("分值预览完成，满分 " + Utils.formatScore(this.scorePlan.totalScore()) + "。");
-		} catch (ScoreRuleException ex) {
-			showScoreRuleError(ex);
-		} catch (IllegalArgumentException ex) {
-			QROpinionDialog.messageErrShow(MainWindow.INSTANCE, ex.getMessage());
 		}
 	}
 
@@ -447,10 +401,14 @@ public class ResultsPanel extends QRPanel {
 	}
 
 	public QuestionScorePolicy.ScaleScoreReport calculateScaleScoreReport(QuestionScorePolicy.Config config) {
+		return calculateScaleScoreReport(config, ruleTextPane.getText());
+	}
+
+	private QuestionScorePolicy.ScaleScoreReport calculateScaleScoreReport(QuestionScorePolicy.Config config, String rulesText) {
 		return new QuestionScorePolicy(
 				project.standardAnswers(),
 				project.combinedAnswersByExamId(),
-				parseScaleSections(ruleTextPane.getText(), standardAnswerCount()),
+				parseScaleSections(rulesText, standardAnswerCount()),
 				entranceEnglishScores,
 				config
 		).calculateScaleScores();
@@ -467,10 +425,14 @@ public class ResultsPanel extends QRPanel {
 	}
 
 	private ScoringPlan buildScaleScorePlan(QuestionScorePolicy.ScaleScoreReport report) {
+		return buildScaleScorePlan(report, ruleTextPane.getText());
+	}
+
+	private ScoringPlan buildScaleScorePlan(QuestionScorePolicy.ScaleScoreReport report, String rulesText) {
 		Map<Integer, BigDecimal> questionScores = new LinkedHashMap<>(report.questionScores());
 		Map<Integer, String> sections = new LinkedHashMap<>();
 		List<String> sectionNames = new ArrayList<>();
-		for (ScorePolicy rule : parseDisplayScoreRules(ruleTextPane.getText(), scoreRuleQuestionCount())) {
+		for (ScorePolicy rule : parseDisplayScoreRules(rulesText, scoreRuleQuestionCount(rulesText))) {
 			if (!sectionNames.contains(rule.questionType())) {
 				sectionNames.add(rule.questionType());
 			}
@@ -548,7 +510,7 @@ public class ResultsPanel extends QRPanel {
 
 	private List<ScoreSection> parseScaleSections(String text, int questionCount) {
 		List<ScoreSection> sections = new ArrayList<>();
-		for (ScorePolicy rule : parseScoreRules(text, scoreRuleQuestionCount())) {
+		for (ScorePolicy rule : parseScoreRules(text, scoreRuleQuestionCount(text))) {
 			List<Integer> machineQuestionNumbers = rule.questionNumbers().stream()
 					.filter(questionNumber -> questionNumber <= questionCount)
 					.toList();
@@ -573,8 +535,12 @@ public class ResultsPanel extends QRPanel {
 	}
 
 	int scoreRuleQuestionCount() {
+		return scoreRuleQuestionCount(ruleTextPane.getText());
+	}
+
+	private int scoreRuleQuestionCount(String rulesText) {
 		int count = standardAnswerCount();
-		String text = ruleTextPane.getText() == null ? "" : ruleTextPane.getText();
+		String text = rulesText == null ? "" : rulesText;
 		for (String rawLine : text.split("\\R")) {
 			String line = Utils.stripComment(rawLine).trim();
 			if (line.isBlank()) {
@@ -602,9 +568,13 @@ public class ResultsPanel extends QRPanel {
 	}
 
 	private List<ScorePolicy> manualScoreRules(ScoringPlan scorePlan) {
+		return manualScoreRules(scorePlan, ruleTextPane.getText());
+	}
+
+	private List<ScorePolicy> manualScoreRules(ScoringPlan scorePlan, String rulesText) {
 		int machineCount = standardAnswerCount();
 		List<ScorePolicy> rules = new ArrayList<>();
-		for (ScorePolicy rule : parseDisplayScoreRules(ruleTextPane.getText(), scoreRuleQuestionCount())) {
+		for (ScorePolicy rule : parseDisplayScoreRules(rulesText, scoreRuleQuestionCount(rulesText))) {
 			boolean manual = rule.questionNumbers().stream().allMatch(questionNumber -> questionNumber > machineCount);
 			if (manual && !scorePlan.sectionNames().contains(rule.questionType())) {
 				continue;
@@ -617,7 +587,11 @@ public class ResultsPanel extends QRPanel {
 	}
 
 	private List<ScoreOutcome> applyManualScores(List<ScoreOutcome> baseResults, ScoringPlan scorePlan) {
-		List<ScorePolicy> manualRules = manualScoreRules(scorePlan);
+		return applyManualScores(baseResults, scorePlan, ruleTextPane.getText());
+	}
+
+	private List<ScoreOutcome> applyManualScores(List<ScoreOutcome> baseResults, ScoringPlan scorePlan, String rulesText) {
+		List<ScorePolicy> manualRules = manualScoreRules(scorePlan, rulesText);
 		if (manualRules.isEmpty()) {
 			return baseResults;
 		}
@@ -628,7 +602,7 @@ public class ResultsPanel extends QRPanel {
 			BigDecimal total = result.earnedScore();
 			Map<String, String> savedScores = project.manualScoresFor(result.examineeId());
 			for (ScorePolicy rule : manualRules) {
-				String savedScore = ManualScoringPanel.scoreForRule(savedScores, rule.questionType(), rule.questionNumbers(), template);
+				String savedScore = ManualScoringPanel.scoreForRule(savedScores, rule.questionType(), rule.questionNumbers(), project, template);
 				BigDecimal score = parseManualScore(savedScore, rule.totalScore());
 				sectionScores.put(rule.questionType(), score);
 				total = total.add(score);
@@ -927,6 +901,154 @@ public class ResultsPanel extends QRPanel {
 
 		private int lineNumber() {
 			return lineNumber;
+		}
+	}
+
+	private record PreviewResult(ScoringPlan scorePlan) {
+	}
+
+	private record CalculateResult(ScoringPlan scorePlan, List<ScoreOutcome> scoreResults, List<String> exportRows,
+								   QuestionScorePolicy.ScaleScoreReport scaleReport, boolean scaleMode) {
+	}
+
+	private final class ExamineeIdVerifyDialog extends QRDialog {
+		private final QRTextPane textPane = new QRTextPane();
+
+		private ExamineeIdVerifyDialog() {
+			super(MainWindow.INSTANCE);
+			setTitle("校对考生准考证号");
+			setTitlePlace(CENTER);
+			setSize(680, 560);
+			setLocationRelativeTo(MainWindow.INSTANCE);
+			setParentWindowNotFollowMove();
+
+			mainPanel.setLayout(new BorderLayout(5, 5));
+			QRPanel center = new QRPanel(false, new BorderLayout());
+			center.setBorder(new LineBorder(QRColorsAndFonts.LINE_COLOR, 3));
+			textPane.addUndoManager();
+			textPane.setLineWrap(false);
+			textPane.setText(defaultMappingText());
+			center.add(textPane.addScrollPane(), BorderLayout.CENTER);
+			mainPanel.add(center, BorderLayout.CENTER);
+
+			QRPanel bottom = new QRPanel(false, new FlowLayout(FlowLayout.RIGHT, 8, 0));
+			bottom.setBorder(new LineBorder(QRColorsAndFonts.FRAME_COLOR_BACK, 10));
+			QRRoundButton cancelButton = new QRRoundButton("取消");
+			cancelButton.setPreferredSize(new Dimension(80, 30));
+			cancelButton.addClickAction(event -> dispose());
+			QRRoundButton saveButton = new QRRoundButton("保存");
+			saveButton.setPreferredSize(new Dimension(80, 30));
+			saveButton.addClickAction(this::save);
+			bottom.add(cancelButton);
+			bottom.add(saveButton);
+			mainPanel.add(bottom, BorderLayout.SOUTH);
+		}
+
+		private String defaultMappingText() {
+			StringBuilder builder = new StringBuilder("原准考证号\t新准考证号\t姓名").append(System.lineSeparator());
+			Map<String, String> names = project.studentNamesByExamId();
+			Set<String> added = new LinkedHashSet<>();
+			for (File answerFile : project.answerFiles() == null ? List.<File>of() : project.answerFiles()) {
+				GradingProject.ReviewedAnswer reviewedAnswer = project.reviewedAnswerFor(answerFile);
+				if (reviewedAnswer == null || reviewedAnswer.examineeId() == null || reviewedAnswer.examineeId().isBlank()) {
+					continue;
+				}
+				String examineeId = reviewedAnswer.examineeId().trim();
+				if (added.add(examineeId)) {
+					builder.append(examineeId).append('\t')
+							.append(examineeId).append('\t')
+							.append(names.getOrDefault(examineeId, ""))
+							.append(System.lineSeparator());
+				}
+			}
+			for (String examineeId : project.combinedAnswersByExamId().keySet()) {
+				if (added.add(examineeId)) {
+					builder.append(examineeId).append('\t')
+							.append(examineeId).append('\t')
+							.append(names.getOrDefault(examineeId, ""))
+							.append(System.lineSeparator());
+				}
+			}
+			return builder.toString();
+		}
+
+		private void save(ActionEvent event) {
+			Map<String, String> mapping = parseMapping();
+			if (mapping == null) {
+				return;
+			}
+			if (mapping.isEmpty()) {
+				QROpinionDialog.messageTellShow(this, "准考证号没有变化。");
+				dispose();
+				return;
+			}
+			project.remapExamineeIds(mapping);
+			project.write();
+			loadEntranceEnglishScores();
+			scoreResults = new ArrayList<>();
+			exportRows = new ArrayList<>();
+			lastScaleReport = null;
+			lastResultScaleMode = false;
+			FinishProjectButton.END_PROJECT.setEnabled(false);
+			previewScores((ActionEvent) null);
+			summaryLabel.setText("已保存准考证号校对结果，请重新计算成绩。");
+			QROpinionDialog.messageTellShow(this, "准考证号校对结果已保存。");
+			dispose();
+		}
+
+		private Map<String, String> parseMapping() {
+			Map<String, String> mapping = new LinkedHashMap<>();
+			Set<String> oldIds = new LinkedHashSet<>();
+			Set<String> newIds = new LinkedHashSet<>();
+			Set<String> knownIds = knownExamineeIds();
+			String[] lines = (textPane.getText() == null ? "" : textPane.getText()).split("\\R", -1);
+			for (int i = 0; i < lines.length; i++) {
+				String line = lines[i].trim();
+				if (line.isEmpty() || isHeaderLine(line)) {
+					continue;
+				}
+				String[] parts = line.split("\\t", -1);
+				if (parts.length < 2 || parts[0].trim().isEmpty() || parts[1].trim().isEmpty()) {
+					QROpinionDialog.messageErrShow(this, "第 " + (i + 1) + " 行格式错误，应为：原准考证号\\t新准考证号\\t姓名");
+					return null;
+				}
+				String oldId = parts[0].trim();
+				String newId = parts[1].trim();
+				if (!knownIds.contains(oldId)) {
+					QROpinionDialog.messageErrShow(this, "第 " + (i + 1) + " 行原准考证号不存在：" + oldId);
+					return null;
+				}
+				if (!oldIds.add(oldId)) {
+					QROpinionDialog.messageErrShow(this, "第 " + (i + 1) + " 行原准考证号重复：" + oldId);
+					return null;
+				}
+				if (!newIds.add(newId)) {
+					QROpinionDialog.messageErrShow(this, "第 " + (i + 1) + " 行新准考证号重复：" + newId);
+					return null;
+				}
+				if (!oldId.equals(newId)) {
+					mapping.put(oldId, newId);
+				}
+			}
+			for (String newId : newIds) {
+				if (knownIds.contains(newId) && !oldIds.contains(newId)) {
+					QROpinionDialog.messageErrShow(this, "新准考证号已存在，不能覆盖未参与校对的考号：" + newId);
+					return null;
+				}
+			}
+			return mapping;
+		}
+
+		private boolean isHeaderLine(String line) {
+			return line.contains("原准考证号") && line.contains("新准考证号");
+		}
+
+		private Set<String> knownExamineeIds() {
+			Set<String> ids = new LinkedHashSet<>();
+			ids.addAll(project.combinedAnswersByExamId().keySet());
+			ids.addAll(project.studentNamesByExamId().keySet());
+			ids.addAll(project.manualScoresByExamId().keySet());
+			return ids;
 		}
 	}
 }

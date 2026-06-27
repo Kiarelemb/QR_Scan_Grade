@@ -3,6 +3,7 @@ package sg.qr.kiarelemb.exam.results;
 import sg.qr.kiarelemb.MainWindow;
 import sg.qr.kiarelemb.exam.model.GradingProject;
 import sg.qr.kiarelemb.exam.scoring.QuestionScorePolicy;
+import swing.qr.kiarelemb.task.QRTaskRunner;
 import swing.qr.kiarelemb.window.enhance.QROpinionDialog;
 import swing.qr.kiarelemb.window.utils.QRFileSelectDialog;
 import swing.qr.kiarelemb.window.utils.QRValueInputDialog;
@@ -42,17 +43,24 @@ public final class ResultsExporter {
 			fileName = fileName.substring(0, fileName.length() - 4);
 		}
 
-		String content = buildScoreExportCsv(projectEnd);
-		try {
-			File utf8File = new File(fileName + "_utf8.csv");
-			Files.writeString(utf8File.toPath(), content, StandardCharsets.UTF_8);
-			File systemFile = new File(fileName + "_gbk.csv");
-			Files.writeString(systemFile.toPath(), content, Charset.forName("GBK"));
-			QROpinionDialog.messageTellShow(MainWindow.INSTANCE,
-					"成绩已导出(请优先打开gbk文件)：\n" + utf8File.getName() + "\n" + systemFile.getName());
-		} catch (IOException ex) {
-			QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "导出成绩失败：\n" + ex.getMessage());
-		}
+		String outputBaseName = fileName;
+		QRTaskRunner.runWithProgress(MainWindow.INSTANCE, "正在导出成绩…",
+				context -> {
+					context.message("正在生成成绩 CSV...");
+					String content = buildScoreExportCsv(projectEnd);
+					context.message("正在写入成绩文件...");
+					File utf8File = new File(outputBaseName + "_utf8.csv");
+					Files.writeString(utf8File.toPath(), content, StandardCharsets.UTF_8);
+					File systemFile = new File(outputBaseName + "_gbk.csv");
+					Files.writeString(systemFile.toPath(), content, Charset.forName("GBK"));
+					return new ExportedFiles(utf8File, systemFile);
+				},
+				files -> QROpinionDialog.messageTellShow(MainWindow.INSTANCE,
+						"成绩已导出(请优先打开gbk文件)：\n" + files.utf8File().getName() + "\n" + files.systemFile().getName()),
+				error -> QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "导出成绩失败：\n" + error.getMessage()));
+	}
+
+	private record ExportedFiles(File utf8File, File systemFile) {
 	}
 
 	private String buildScoreExportCsv(ResultsPanel projectEnd) {

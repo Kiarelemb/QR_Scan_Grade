@@ -5,9 +5,9 @@ import sg.qr.kiarelemb.MainWindow;
 import sg.qr.kiarelemb.exam.model.GradingProject;
 import sg.qr.kiarelemb.exam.model.SheetTemplate;
 import sg.qr.kiarelemb.exam.processing.DocumentPageLoader;
-import sg.qr.kiarelemb.exam.processing.PDFConversionTask;
 import sg.qr.kiarelemb.menu.data.EnglishScoreInput;
 import swing.qr.kiarelemb.basic.*;
+import swing.qr.kiarelemb.task.QRTaskRunner;
 import swing.qr.kiarelemb.theme.QRColorsAndFonts;
 import swing.qr.kiarelemb.window.basic.QRDialog;
 import swing.qr.kiarelemb.window.enhance.QROpinionDialog;
@@ -220,8 +220,8 @@ public class NewGradingProjectDialog extends QRDialog {
 			return;
 		}
 		if (needsPdfConversion) {
-			PDFConversionTask.run(this, "正在转换答卷 PDF…",
-					progress -> DocumentPageLoader.sortedAnswerImages(answerDirectory, progress),
+			QRTaskRunner.runWithProgress(this, "正在转换答卷 PDF…",
+					context -> DocumentPageLoader.sortedAnswerImages(answerDirectory, context::progress),
 					images -> {
 						try {
 							finishSaveProject(buildAnswerFilePlan(images), projectName, standardAnswers, machineSubjectiveCount);
@@ -229,7 +229,7 @@ public class NewGradingProjectDialog extends QRDialog {
 							QROpinionDialog.messageErrShow(NewGradingProjectDialog.this, "批阅项目保存失败：\n" + ex.getMessage());
 						}
 					},
-					error -> QROpinionDialog.messageErrShow(NewGradingProjectDialog.this, "读取答卷文件失败：\n" + error));
+					error -> QROpinionDialog.messageErrShow(NewGradingProjectDialog.this, "读取答卷文件失败：\n" + error.getMessage()));
 			return;
 		}
 

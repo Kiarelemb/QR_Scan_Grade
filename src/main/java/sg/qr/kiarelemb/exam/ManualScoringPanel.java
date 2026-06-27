@@ -9,6 +9,9 @@ import sg.qr.kiarelemb.exam.model.SubjectiveAnswerRegion;
 import sg.qr.kiarelemb.exam.model.SheetTemplate;
 import swing.qr.kiarelemb.basic.*;
 import swing.qr.kiarelemb.inter.QRActionRegister;
+import swing.qr.kiarelemb.task.QRTaskOptions;
+import swing.qr.kiarelemb.task.QRTaskRunner;
+import swing.qr.kiarelemb.task.QRTaskWorker;
 import swing.qr.kiarelemb.theme.QRColorsAndFonts;
 import swing.qr.kiarelemb.utils.PicturePanel;
 import swing.qr.kiarelemb.window.enhance.QROpinionDialog;
@@ -19,6 +22,7 @@ import javax.swing.*;
 import javax.swing.border.LineBorder;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
@@ -38,6 +42,8 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 	private final QRLabel progressLabel = new QRLabel();
 	private final QRLabel questionLabel = new QRLabel();
 	private final QRTextField scoreField = new QRTextField();
+	private QRTaskWorker<ManualImageLoadResult> imageLoadWorker;
+	private int imageLoadSerial;
 	private int index;
 
 	public ManualScoringPanel(GradingProject project, SheetTemplate template) {
@@ -49,15 +55,15 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 		loadCurrent();
 	}
 
-	public static boolean hasManualQuestions(SheetTemplate template) {
-		return !manualRegions(template).isEmpty();
+	public static boolean hasManualQuestions(GradingProject project, SheetTemplate template) {
+		return !manualRegions(project, template).isEmpty();
 	}
 
 	public static boolean allManualScoresSaved(GradingProject project, SheetTemplate template) {
 		if (project == null || project.answerFiles() == null || project.answerFiles().isEmpty()) {
 			return true;
 		}
-		List<SubjectiveAnswerRegion> regions = manualRegions(template);
+		List<SubjectiveAnswerRegion> regions = manualRegions(project, template);
 		if (regions.isEmpty()) {
 			return true;
 		}
@@ -94,7 +100,7 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 		buttons.add(button("跳转", event -> jump()));
 		buttons.add(button("返回", event -> backToSubjectiveReview()));
 		buttons.add(button("上一题", event -> previous()));
-		buttons.add(button("下一题", event -> next()));
+		buttons.add(button("下一题", event -> next(event)));
 		buttons.add(button("进入算分", event -> finish()));
 		panel.add(buttons, BorderLayout.EAST);
 
@@ -114,7 +120,7 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 		QRPanel inputPanel = new QRPanel(false, new FlowLayout(FlowLayout.LEFT, 8, 0));
 		inputPanel.add(new QRLabel("得分"));
 		scoreField.setPreferredSize(new Dimension(120, 32));
-		scoreField.addActionListener(event -> next());
+		scoreField.addActionListener(event -> next(null));
 		inputPanel.add(scoreField);
 		panel.add(inputPanel, BorderLayout.CENTER);
 		return panel;
@@ -146,15 +152,51 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 		questionLabel.setText(item.region().name() + "（题号 " + item.region().startQuestion()
 							  + "-" + item.region().endQuestion() + maxScoreText(item.region().maxScore()) + "）");
 		scoreField.setText(project.manualScoresFor(item.examineeId()).getOrDefault(item.region().name(), ""));
-		try {
-			BufferedImage image = ImageIO.read(item.imageFile());
-			BufferedImage crop = crop(image, item.region());
-			picturePanel.setImage(crop, pictureDisplaySize(crop));
-			picturePanel.resetView();
-			scoreField.requestFocusInWindow();
-		} catch (IOException ex) {
-			QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "读取主观题答卷截图失败：\n" + ex.getMessage());
+		startImageLoadTask(item, index);
+	}
+
+	private void startImageLoadTask(ManualReviewItem item, int itemIndex) {
+		int serial = ++imageLoadSerial;
+		if (imageLoadWorker != null && !imageLoadWorker.isDone()) {
+			imageLoadWorker.cancel(true);
 		}
+		setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+		QRTaskOptions options = new QRTaskOptions()
+				.onSuccess((ManualImageLoadResult result) -> applyImageLoadResult(serial, result))
+				.onError(error -> handleImageLoadError(serial, error))
+				.onCancelled(() -> {
+					if (serial == imageLoadSerial) {
+						setCursor(Cursor.getDefaultCursor());
+					}
+				});
+		imageLoadWorker = QRTaskRunner.run(options, context -> {
+			context.message("正在读取主观题答卷截图...");
+			BufferedImage image = ImageIO.read(item.imageFile());
+			context.checkCancelled();
+			if (image == null) {
+				throw new IOException("不支持的图片格式或图片已损坏。");
+			}
+			BufferedImage crop = crop(image, item.region());
+			return new ManualImageLoadResult(itemIndex, crop);
+		});
+	}
+
+	private void applyImageLoadResult(int serial, ManualImageLoadResult result) {
+		if (serial != imageLoadSerial || result.itemIndex() != index) {
+			return;
+		}
+		setCursor(Cursor.getDefaultCursor());
+		picturePanel.setImage(result.image(), pictureDisplaySize(result.image()));
+		picturePanel.resetView();
+		scoreField.requestFocusInWindow();
+	}
+
+	private void handleImageLoadError(int serial, Throwable error) {
+		if (serial != imageLoadSerial) {
+			return;
+		}
+		setCursor(Cursor.getDefaultCursor());
+		QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "读取主观题答卷截图失败：\n" + error.getMessage());
 	}
 
 	private String maxScoreText(BigDecimal maxScore) {
@@ -234,8 +276,18 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 		}
 	}
 
-	private void next() {
+	private void next(ActionEvent event) {
 		if (!saveCurrent()) {
+			return;
+		}
+		if (isCtrlDown(event)) {
+			if (ManualScoringPanel.allManualScoresSaved(project, template)) {
+				project.setManualReviewIndex(index);
+				project.write();
+				MainWindow.INSTANCE.showProjectEnd(project);
+			} else {
+				QROpinionDialog.messageTellShow(MainWindow.INSTANCE, "还有主观题未完成人工评分，不能直接进入算分。");
+			}
 			return;
 		}
 		if (index < items.size() - 1) {
@@ -244,6 +296,10 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 		} else {
 			QROpinionDialog.messageTellShow(MainWindow.INSTANCE, "人工判分已到最后一题。");
 		}
+	}
+
+	private boolean isCtrlDown(ActionEvent event) {
+		return event != null && (event.getModifiers() & (InputEvent.CTRL_DOWN_MASK | InputEvent.CTRL_MASK)) != 0;
 	}
 
 	private void jump() {
@@ -296,17 +352,17 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 		if (project == null || project.answerFiles() == null) {
 			return List.of();
 		}
-		List<SubjectiveAnswerRegion> regions = manualRegions(template);
+		List<SubjectiveAnswerRegion> regions = manualRegions(project, template);
 		if (regions.isEmpty()) {
 			return List.of();
 		}
 		List<ManualReviewItem> items = new ArrayList<>();
-		for (File answerFile : project.answerFiles()) {
-			GradingProject.ReviewedAnswer reviewedAnswer = project.reviewedAnswerFor(answerFile);
-			if (reviewedAnswer == null || reviewedAnswer.examineeId() == null || reviewedAnswer.examineeId().isBlank()) {
-				continue;
-			}
-			for (SubjectiveAnswerRegion region : regions) {
+		for (SubjectiveAnswerRegion region : regions) {
+			for (File answerFile : project.answerFiles()) {
+				GradingProject.ReviewedAnswer reviewedAnswer = project.reviewedAnswerFor(answerFile);
+				if (reviewedAnswer == null || reviewedAnswer.examineeId() == null || reviewedAnswer.examineeId().isBlank()) {
+					continue;
+				}
 				File imageFile = manualImageFile(project, answerFile, region);
 				items.add(new ManualReviewItem(answerFile, imageFile, reviewedAnswer.examineeId(), region));
 			}
@@ -322,13 +378,15 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 		return backFile == null ? answerFile : backFile;
 	}
 
-	private static List<SubjectiveAnswerRegion> manualRegions(SheetTemplate template) {
+	private static List<SubjectiveAnswerRegion> manualRegions(GradingProject project, SheetTemplate template) {
 		if (template == null || template.subjectiveRegions() == null) {
 			return List.of();
 		}
+		boolean allSubjectiveManual = project != null && project.machineSubjectiveCount() <= 0;
 		return template.subjectiveRegions().stream()
 				.filter(region -> region.mode() == SubjectiveAnswerRegion.GradingMode.MANUAL
-								  || region.mode() == SubjectiveAnswerRegion.GradingMode.MIXED)
+								  || region.mode() == SubjectiveAnswerRegion.GradingMode.MIXED
+								  || (allSubjectiveManual && region.mode() == SubjectiveAnswerRegion.GradingMode.OCR))
 				.toList();
 	}
 
@@ -351,6 +409,11 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 	}
 
 	public static String scoreForRule(Map<String, String> savedScores, String ruleName, Collection<Integer> questionNumbers, SheetTemplate template) {
+		return scoreForRule(savedScores, ruleName, questionNumbers, null, template);
+	}
+
+	public static String scoreForRule(Map<String, String> savedScores, String ruleName, Collection<Integer> questionNumbers,
+									  GradingProject project, SheetTemplate template) {
 		if (savedScores == null || savedScores.isEmpty()) {
 			return "";
 		}
@@ -361,7 +424,7 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 		if (questionNumbers == null || questionNumbers.isEmpty()) {
 			return "";
 		}
-		for (SubjectiveAnswerRegion region : manualRegions(template)) {
+		for (SubjectiveAnswerRegion region : manualRegions(project, template)) {
 			if (covers(region, questionNumbers)) {
 				String score = savedScores.getOrDefault(region.name(), "");
 				if (!score.isBlank()) {
@@ -386,5 +449,8 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 	}
 
 	private record ManualReviewItem(File answerFile, File imageFile, String examineeId, SubjectiveAnswerRegion region) {
+	}
+
+	private record ManualImageLoadResult(int itemIndex, BufferedImage image) {
 	}
 }

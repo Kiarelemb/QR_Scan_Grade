@@ -34,6 +34,7 @@ public final class TemplateDetectionDebug {
 		System.out.println("choiceRowStartYs=" + Arrays.toString(detector.choiceRowStartYs));
 		System.out.println("choiceColStartXs=" + Arrays.toString(detector.choiceColStartXs));
 		System.out.println("choiceQuestionsPerCol=" + Arrays.toString(detector.choiceQuestionsPerCol));
+		System.out.println("choiceOptionCountsPerCol=" + Arrays.toString(detector.choiceOptionCountsPerCol));
 		System.out.println("choiceRegion=" + detector.choiceRegionRect);
 		printChoiceCandidateRows(detector);
 	}

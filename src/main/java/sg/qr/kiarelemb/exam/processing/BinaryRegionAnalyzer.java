@@ -53,4 +53,23 @@ public final class BinaryRegionAnalyzer {
 		}
 		return bestRatio;
 	}
+
+	public static double stableWhiteRatioNear(Mat binary, Rect region, int radiusX, int radiusY, int step) {
+		double centered = whiteRatio(binary, region);
+		double bestScore = centered;
+		double bestRatio = centered;
+		double maxDistance = Math.max(1.0, Math.hypot(radiusX, radiusY));
+		for (int dy = -radiusY; dy <= radiusY; dy += step) {
+			for (int dx = -radiusX; dx <= radiusX; dx += step) {
+				double ratio = whiteRatio(binary, shifted(region, dx, dy));
+				double distancePenalty = Math.hypot(dx, dy) / maxDistance * 0.08;
+				double score = ratio - distancePenalty;
+				if (score > bestScore) {
+					bestScore = score;
+					bestRatio = ratio;
+				}
+			}
+		}
+		return bestRatio;
+	}
 }

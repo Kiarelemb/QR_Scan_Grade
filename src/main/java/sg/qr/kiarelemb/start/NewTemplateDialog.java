@@ -14,12 +14,14 @@ import swing.qr.kiarelemb.basic.QRPanel;
 import swing.qr.kiarelemb.basic.QRRoundButton;
 import swing.qr.kiarelemb.basic.QRTextField;
 import swing.qr.kiarelemb.theme.QRColorsAndFonts;
+import swing.qr.kiarelemb.utils.QRFilePathTextField;
 import swing.qr.kiarelemb.window.basic.QRDialog;
 import swing.qr.kiarelemb.window.enhance.QROpinionDialog;
 
 import javax.imageio.ImageIO;
 import javax.swing.border.LineBorder;
 import java.awt.*;
+import java.awt.event.ActionEvent;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -101,6 +103,7 @@ public class NewTemplateDialog extends QRDialog {
 		nameLabel.setPreferredSize(new Dimension(80, 25));
 
 		nameField = new QRTextField();
+		nameField.setTextLeft();
 		nameField.setPreferredSize(new Dimension(220, 25));
 		if (pictureFile != null) {
 			nameField.setText(defaultTemplateName(pictureFile));
@@ -119,7 +122,7 @@ public class NewTemplateDialog extends QRDialog {
 		mainPanel.add(bottomPanel, BorderLayout.SOUTH);
 	}
 
-	private void saveTemplate(java.awt.event.ActionEvent e) {
+	private void saveTemplate(ActionEvent e) {
 		if (detector == null) {
 			QROpinionDialog.messageErrShow(this, "模板尚未识别完成，暂时不能保存。");
 			return;

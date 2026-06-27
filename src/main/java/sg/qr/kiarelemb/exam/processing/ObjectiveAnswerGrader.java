@@ -51,7 +51,7 @@ public class ObjectiveAnswerGrader {
 			switch (question.type()) {
 				case SINGLE_CHOICE -> {
 					totalScore++;
-					String detected = detectBestOption(binary, question.optionRegions(), choiceMap);
+					String detected = detectBestOption(binary, question.optionRegions(), labelsFor(question, choiceMap));
 					boolean uncertain = isUncertain(binary, question.optionRegions());
 					boolean correct = detected != null && detected.equals(question.correctAnswer());
 					if (correct) earnedScore++;
@@ -94,6 +94,12 @@ public class ObjectiveAnswerGrader {
 	}
 
 	private record DetectedDigit(int digit, double ratio) {
+	}
+
+	private String[] labelsFor(SheetQuestion question, String[] choiceMap) {
+		int optionCount = question.optionRegions() == null ? 0 : question.optionRegions().size();
+		int labelCount = Math.max(0, Math.min(optionCount, choiceMap.length));
+		return Arrays.copyOf(choiceMap, labelCount);
 	}
 
 

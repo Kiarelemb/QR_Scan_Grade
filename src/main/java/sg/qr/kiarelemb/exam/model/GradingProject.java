@@ -4,7 +4,9 @@ import java.util.logging.Logger;
 
 import method.qr.kiarelemb.utils.QRFileUtils;
 import method.qr.kiarelemb.utils.QRPropertiesUtils;
+import method.qr.kiarelemb.utils.QRTimeCountUtil;
 import sg.qr.kiarelemb.exam.processing.DocumentPageLoader;
+import swing.qr.kiarelemb.utils.QRComponentUtils;
 
 import java.io.File;
 import java.util.*;
@@ -518,6 +520,53 @@ public final class GradingProject {
 		// 会触发重新识别产生不同考号的多余条目。
 		this.reviewedAnswersByFile.put(answerFile.getName(), new ReviewedAnswer(id, normalizedAnswers));
 		this.recognizedCount = this.recognizedAnswers.size();
+	}
+
+	public void remapExamineeIds(Map<String, String> examineeIdMapping) {
+		if (examineeIdMapping == null || examineeIdMapping.isEmpty()) {
+			return;
+		}
+		Map<String, String> normalized = new LinkedHashMap<>();
+		for (Map.Entry<String, String> entry : examineeIdMapping.entrySet()) {
+			String oldId = entry.getKey() == null ? "" : entry.getKey().trim();
+			String newId = entry.getValue() == null ? "" : entry.getValue().trim();
+			if (!oldId.isEmpty() && !newId.isEmpty() && !oldId.equals(newId)) {
+				normalized.put(oldId, newId);
+			}
+		}
+		if (normalized.isEmpty()) {
+			return;
+		}
+		Map<String, String> updatedRecognizedAnswers = new LinkedHashMap<>();
+		for (Map.Entry<String, String> entry : this.recognizedAnswers.entrySet()) {
+			updatedRecognizedAnswers.put(normalized.getOrDefault(entry.getKey(), entry.getKey()), entry.getValue());
+		}
+		this.recognizedAnswers = updatedRecognizedAnswers;
+		this.recognizedCount = this.recognizedAnswers.size();
+
+		Map<String, ReviewedAnswer> updatedReviewedAnswers = new LinkedHashMap<>();
+		for (Map.Entry<String, ReviewedAnswer> entry : this.reviewedAnswersByFile.entrySet()) {
+			ReviewedAnswer reviewed = entry.getValue();
+			if (reviewed == null) {
+				updatedReviewedAnswers.put(entry.getKey(), null);
+			} else {
+				String examineeId = normalized.getOrDefault(reviewed.examineeId(), reviewed.examineeId());
+				updatedReviewedAnswers.put(entry.getKey(), new ReviewedAnswer(examineeId, reviewed.answers()));
+			}
+		}
+		this.reviewedAnswersByFile = updatedReviewedAnswers;
+
+		Map<String, String> updatedStudentNames = new LinkedHashMap<>();
+		for (Map.Entry<String, String> entry : this.studentNamesByExamId.entrySet()) {
+			updatedStudentNames.put(normalized.getOrDefault(entry.getKey(), entry.getKey()), entry.getValue());
+		}
+		this.studentNamesByExamId = updatedStudentNames;
+
+		Map<String, Map<String, String>> updatedManualScores = new LinkedHashMap<>();
+		for (Map.Entry<String, Map<String, String>> entry : this.manualScoresByExamId.entrySet()) {
+			updatedManualScores.put(normalized.getOrDefault(entry.getKey(), entry.getKey()), new LinkedHashMap<>(entry.getValue()));
+		}
+		this.manualScoresByExamId = updatedManualScores;
 	}
 
 	private static String normalizeAnswers(String answers) {

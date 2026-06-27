@@ -161,7 +161,7 @@ public final class SheetCalibrator {
 				bestOffset = offset;
 			}
 		}
-		if (bestOffset == 0 || bestScore < currentScore + 0.03 || bestScore < 0.16) {
+		if (bestOffset == 0 || bestScore < currentScore + 0.06 || bestScore < 0.20) {
 			return;
 		}
 
@@ -243,12 +243,19 @@ public final class SheetCalibrator {
 	}
 
 	private static double rowStructureScore(Mat binary, List<Rect> optionRects, int yOffset) {
-		double total = 0;
+		List<Double> ratios = new ArrayList<>();
 		for (Rect rect : optionRects) {
-			total += BinaryRegionAnalyzer.whiteRatio(binary,
-					BinaryRegionAnalyzer.inflate(new Rect(rect.x(), rect.y() + yOffset, rect.width(), rect.height()), 3));
+			ratios.add(BinaryRegionAnalyzer.whiteRatio(binary,
+					BinaryRegionAnalyzer.inflate(new Rect(rect.x(), rect.y() + yOffset, rect.width(), rect.height()), 3)));
 		}
-		return total / optionRects.size();
+		if (ratios.isEmpty()) {
+			return 0;
+		}
+		ratios.sort(Double::compareTo);
+		double best = ratios.get(ratios.size() - 1);
+		double second = ratios.size() < 2 ? 0 : ratios.get(ratios.size() - 2);
+		double average = ratios.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+		return Math.max(0, best - Math.max(second, average) * 0.55);
 	}
 
 	private static int estimateRowGap(List<SheetQuestion> questions, List<Integer> group) {

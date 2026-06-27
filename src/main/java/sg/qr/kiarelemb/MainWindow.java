@@ -11,13 +11,13 @@ import sg.qr.kiarelemb.exam.results.ResultsPanel;
 import sg.qr.kiarelemb.exam.model.GradingProject;
 import sg.qr.kiarelemb.exam.model.SheetTemplate;
 import sg.qr.kiarelemb.exam.processing.DocumentPageLoader;
-import sg.qr.kiarelemb.exam.processing.PDFConversionTask;
 import sg.qr.kiarelemb.exam.processing.SheetTemplateFileStore;
 import sg.qr.kiarelemb.menu.data.EnglishScoreInput;
 import sg.qr.kiarelemb.menu.type.SettingsItem;
 import sg.qr.kiarelemb.res.Info;
 import swing.qr.kiarelemb.QRSwing;
 import swing.qr.kiarelemb.basic.QRButton;
+import swing.qr.kiarelemb.task.QRTaskRunner;
 import swing.qr.kiarelemb.utils.QRComponentUtils;
 import swing.qr.kiarelemb.window.basic.QRFrame;
 
@@ -95,10 +95,10 @@ public class MainWindow extends QRFrame {
 		}
 
 		if (needsConversion) {
-			PDFConversionTask.run(this, "正在加载答卷…",
-					progress -> DocumentPageLoader.sortedAnswerImages(answerDir, progress),
+			QRTaskRunner.runWithProgress(this, "正在加载答卷…",
+					context -> DocumentPageLoader.sortedAnswerImages(answerDir, context::progress),
 					images -> continueStartProject(project, finalPageCount),
-					error -> swing.qr.kiarelemb.window.enhance.QROpinionDialog.messageErrShow(this, "加载答卷失败：\n" + error));
+					error -> swing.qr.kiarelemb.window.enhance.QROpinionDialog.messageErrShow(this, "加载答卷失败：\n" + error.getMessage()));
 			return;
 		}
 
@@ -150,7 +150,7 @@ public class MainWindow extends QRFrame {
 	}
 
 	private boolean shouldShowManualReview(GradingProject project, SheetTemplate template) {
-		return ManualScoringPanel.hasManualQuestions(template)
+		return ManualScoringPanel.hasManualQuestions(project, template)
 			   && !ManualScoringPanel.allManualScoresSaved(project, template);
 	}
 

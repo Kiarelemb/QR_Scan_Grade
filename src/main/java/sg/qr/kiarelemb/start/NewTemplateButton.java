@@ -54,26 +54,26 @@ public class NewTemplateButton extends StartActionButton {
 	private static void convertPdfAndShowPreview(File pdfFile) {
 		QRTaskRunner.runWithProgress(MainWindow.INSTANCE, "正在转换 PDF 模板…",
 				context -> DocumentPageLoader.documentImages(pdfFile, context::progress),
-				NewTemplateButton::showTemplatePreview,
+				images -> showTemplatePreview(images, pdfFile),
 				error -> QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "读取模板文件失败：\n" + error.getMessage()));
 	}
 
 	private static void showImagePreview(File imageFile) {
 		try {
 			List<File> images = DocumentPageLoader.documentImages(imageFile);
-			showTemplatePreview(images);
+			showTemplatePreview(images, imageFile);
 		} catch (Exception ex) {
 			QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "读取模板文件失败：\n" + ex.getMessage());
 		}
 	}
 
-	private static void showTemplatePreview(List<File> images) {
+	private static void showTemplatePreview(List<File> images, File sourceFile) {
 		QRPicturePreviewDialog dialog = new QRPicturePreviewDialog(MainWindow.INSTANCE,
 				images.toArray(File[]::new), true) {
 			@Override
 			protected void sureAction(ActionEvent e) {
 				super.sureAction(e);
-				NewTemplateDialog window = new NewTemplateDialog(images);
+				NewTemplateDialog window = new NewTemplateDialog(images, sourceFile);
 				window.setVisible(true);
 			}
 		};

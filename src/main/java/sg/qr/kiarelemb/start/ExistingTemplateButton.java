@@ -2,6 +2,7 @@ package sg.qr.kiarelemb.start;
 
 import sg.qr.kiarelemb.MainWindow;
 import sg.qr.kiarelemb.exam.processing.SheetTemplateFileStore;
+import swing.qr.kiarelemb.task.QRTaskRunner;
 import swing.qr.kiarelemb.window.enhance.QROpinionDialog;
 
 import java.awt.event.ActionEvent;
@@ -33,11 +34,15 @@ public class ExistingTemplateButton extends StartActionButton {
 			return;
 		}
 
-		MainWindow.INSTANCE.setCursorWait();
-		try {
-			MainWindow.INSTANCE.setCenterComponent(new ExistingTemplatePanel());
-		} finally {
-			MainWindow.INSTANCE.setCursorDefault();
-		}
+		QRTaskRunner.runWithProgress(MainWindow.INSTANCE, "正在加载模板…",
+				context -> ExistingTemplatePanel.loadTemplateData(files, context),
+				result -> {
+					MainWindow.INSTANCE.setCenterComponent(new ExistingTemplatePanel(result));
+					if (!result.failures().isEmpty()) {
+						QROpinionDialog.messageErrShow(MainWindow.INSTANCE,
+								"部分模板读取失败：\n" + String.join("\n", result.failures()));
+					}
+				},
+				error -> QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "读取模板失败：\n" + error.getMessage()));
 	}
 }

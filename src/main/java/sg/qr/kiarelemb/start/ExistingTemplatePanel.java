@@ -11,6 +11,7 @@ import swing.qr.kiarelemb.basic.QRLabel;
 import swing.qr.kiarelemb.basic.QRPanel;
 import swing.qr.kiarelemb.basic.QRRoundButton;
 import swing.qr.kiarelemb.basic.QRTextField;
+import swing.qr.kiarelemb.task.QRTaskContext;
 import swing.qr.kiarelemb.theme.QRColorsAndFonts;
 import swing.qr.kiarelemb.utils.QRPicturePreviewPanel;
 import swing.qr.kiarelemb.window.basic.QRDialog;
@@ -20,7 +21,9 @@ import swing.qr.kiarelemb.window.utils.QRFileSelectDialog;
 import swing.qr.kiarelemb.window.utils.QRValueInputDialog;
 
 import javax.swing.border.Border;
+import javax.swing.border.EmptyBorder;
 import javax.swing.border.LineBorder;
+import javax.swing.border.MatteBorder;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -36,7 +39,7 @@ public class ExistingTemplatePanel extends QRPanel {
 	private static final File TEMPLATE_DIR = new File("sg");
 	private static final File ORDER_FILE = new File(TEMPLATE_DIR, ".template-order");
 	private static final Font INFO_FONT = QRColorsAndFonts.createFont(16);
-	private static final Border SELECTED_CARD_BORDER = new LineBorder(QRColorsAndFonts.BLUE_LIGHT, 3);
+	private static final Border SELECTED_CARD_BORDER = new LineBorder(QRColorsAndFonts.PRESS_COLOR, 3);
 
 	private final QRPanel templatePanel = new QRPanel();
 	private final QRLabel summaryLabel = new QRLabel("请选择一个模板");
@@ -50,15 +53,21 @@ public class ExistingTemplatePanel extends QRPanel {
 	private TemplateItem selectedItem;
 
 	public ExistingTemplatePanel() {
+		this(loadTemplateData(templateFiles(), null));
+	}
+
+	public ExistingTemplatePanel(TemplateLoadResult loadResult) {
 		initView();
-		loadTemplates();
+		applyLoadedTemplates(loadResult);
 	}
 
 	private void initView() {
 		setLayout(new BorderLayout());
+		setBorder(new LineBorder(QRColorsAndFonts.FRAME_COLOR_BACK, 10));
 
 		QRPanel topPanel = new QRPanel(false, new BorderLayout());
-		topPanel.setBorder(new LineBorder(QRColorsAndFonts.FRAME_COLOR_BACK, 10));
+		topPanel.setBorder(new MatteBorder(0, 0, 2, 0, QRColorsAndFonts.LINE_COLOR));
+		topPanel.setPreferredSize(500, 40);
 		QRPanel buttonPanel = new QRPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
 		initToolbarButton(buttonPanel, backButton, this::backToStartPanel);
 		initToolbarButton(buttonPanel, renameButton, this::renameSelectedTemplate);
@@ -71,11 +80,10 @@ public class ExistingTemplatePanel extends QRPanel {
 		templatePanel.setLayout(new FlowLayout(FlowLayout.LEFT, 18, 18));
 		add(templatePanel.addScrollPane(), BorderLayout.CENTER);
 
-		QRPanel bottomPanel = new QRPanel(false, new BorderLayout());
-		bottomPanel.setBorder(new LineBorder(QRColorsAndFonts.FRAME_COLOR_BACK, 10));
+		QRPanel bottomPanel = new QRPanel(false, new BorderLayout(5, 5));
 		summaryLabel.setFont(INFO_FONT);
 		bottomPanel.add(summaryLabel, BorderLayout.CENTER);
-		newProjectButton.setPreferredSize(new Dimension(130, 30));
+		newProjectButton.setPreferredSize(130, 35);
 		newProjectButton.addClickAction(this::openNewProjectWindow);
 		bottomPanel.add(newProjectButton, BorderLayout.EAST);
 		add(bottomPanel, BorderLayout.SOUTH);
@@ -93,23 +101,16 @@ public class ExistingTemplatePanel extends QRPanel {
 		MainWindow.INSTANCE.showStartPanel();
 	}
 
-	private void loadTemplates() {
+	private void applyLoadedTemplates(TemplateLoadResult loadResult) {
 		templateItems.clear();
 		selectedItem = null;
 		templatePanel.removeAll();
 
-		File[] files = TEMPLATE_DIR.listFiles(file ->
-				file.isFile() && file.getName().toLowerCase().endsWith("." + SheetTemplateFileStore.TEMPLATE_EXTENSION));
-
-		for (File file : sortTemplateFiles(files)) {
-			try {
-				SheetTemplate template = SheetTemplateFileStore.load(file);
-				TemplateItem item = new TemplateItem(file, template);
-				templateItems.add(item);
-				templatePanel.add(item.card);
-			} catch (IOException ex) {
-				QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "读取模板失败：\n" + file.getAbsolutePath() + "\n" + ex.getMessage());
-			}
+		TemplateLoadResult result = loadResult == null ? new TemplateLoadResult(List.of(), List.of()) : loadResult;
+		for (LoadedTemplate loaded : result.templates()) {
+			TemplateItem item = new TemplateItem(loaded.file(), loaded.template());
+			templateItems.add(item);
+			templatePanel.add(item.card);
 		}
 
 		summaryLabel.setText(templateItems.isEmpty()
@@ -120,8 +121,44 @@ public class ExistingTemplatePanel extends QRPanel {
 		templatePanel.repaint();
 	}
 
-	private List<File> sortTemplateFiles(File[] files) {
-		List<String> savedOrder = readTemplateOrder();
+	static TemplateLoadResult loadTemplateData(File[] files, QRTaskContext context) {
+		List<LoadedTemplate> templates = new ArrayList<>();
+		List<String> failures = new ArrayList<>();
+		List<File> sortedFiles = sortTemplateFiles(files, failures);
+		int total = sortedFiles.size();
+		if (context != null) {
+			context.message("正在加载模板...");
+			context.progress(0, Math.max(1, total));
+		}
+		for (int i = 0; i < total; i++) {
+			if (context != null) {
+				context.checkCancelled();
+				context.message("正在加载模板 " + (i + 1) + " / " + total);
+			}
+			File file = sortedFiles.get(i);
+			try {
+				templates.add(new LoadedTemplate(file, SheetTemplateFileStore.load(file)));
+			} catch (IOException ex) {
+				failures.add(file.getName() + "：" + ex.getMessage());
+			}
+			if (context != null) {
+				context.progress(i + 1, Math.max(1, total));
+			}
+		}
+		return new TemplateLoadResult(List.copyOf(templates), List.copyOf(failures));
+	}
+
+	private static File[] templateFiles() {
+		File[] files = TEMPLATE_DIR.listFiles(file ->
+				file.isFile() && file.getName().toLowerCase().endsWith("." + SheetTemplateFileStore.TEMPLATE_EXTENSION));
+		return files == null ? new File[0] : files;
+	}
+
+	private static List<File> sortTemplateFiles(File[] files, List<String> failures) {
+		if (files == null || files.length == 0) {
+			return List.of();
+		}
+		List<String> savedOrder = readTemplateOrder(failures);
 		Map<String, Integer> orderIndex = new HashMap<>();
 		for (int i = 0; i < savedOrder.size(); i++) {
 			orderIndex.putIfAbsent(savedOrder.get(i), i);
@@ -139,7 +176,7 @@ public class ExistingTemplatePanel extends QRPanel {
 		return sortedFiles;
 	}
 
-	private List<String> readTemplateOrder() {
+	private static List<String> readTemplateOrder(List<String> failures) {
 		if (!ORDER_FILE.isFile()) {
 			return List.of();
 		}
@@ -150,7 +187,9 @@ public class ExistingTemplatePanel extends QRPanel {
 					.filter(name -> !name.isEmpty())
 					.toList();
 		} catch (IOException ex) {
-			QROpinionDialog.messageErrShow(MainWindow.INSTANCE, "读取模板顺序失败：\n" + ex.getMessage());
+			if (failures != null) {
+				failures.add("读取模板顺序失败：" + ex.getMessage());
+			}
 			return List.of();
 		}
 	}
@@ -198,6 +237,10 @@ public class ExistingTemplatePanel extends QRPanel {
 		TemplateItem item = selectedItem;
 		QRValueInputDialog input = new QRValueInputDialog(MainWindow.INSTANCE, "新的模板名", "请输入新的模板名：");
 		input.textField().setType(QRTextField.TYPE.FILE_NAME);
+		input.setDefaultValue(item.template.name());
+		input.sureButton().setEnabled(false);
+		input.requireDefaultValueChange();
+
 		input.setVisible(true);
 		if (!input.isApproved()) return;
 		String answer = input.getAnswer();
@@ -358,6 +401,12 @@ public class ExistingTemplatePanel extends QRPanel {
 		new NewGradingProjectDialog(selectedItem.template, selectedItem.file, answerDirectory).setVisible(true);
 	}
 
+	static final record TemplateLoadResult(List<LoadedTemplate> templates, List<String> failures) {
+	}
+
+	static final record LoadedTemplate(File file, SheetTemplate template) {
+	}
+
 	private final class TemplateItem {
 		private final File file;
 		private final SheetTemplate template;
@@ -377,7 +426,8 @@ public class ExistingTemplatePanel extends QRPanel {
 		private TemplateCard(TemplateItem item) {
 			super(item.template.pictureFile(), item.template.name());
 			this.item = item;
-			this.defaultBorder = getBorder();
+			this.defaultBorder = new EmptyBorder(3, 3, 3, 3);
+			setBorder(defaultBorder);
 			addMouseListener();
 		}
 

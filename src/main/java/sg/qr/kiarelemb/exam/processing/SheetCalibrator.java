@@ -9,6 +9,7 @@ import sg.qr.kiarelemb.exam.model.SheetQuestion;
 import sg.qr.kiarelemb.exam.model.SheetTemplate;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.logging.Logger;
 
@@ -27,25 +28,36 @@ public final class SheetCalibrator {
 
 		try {
 			Mat templateBinary = templateBinary(template);
-			RegistrationMarkDetector.MarkBounds templateBounds = RegistrationMarkDetector.detectMarkBounds(templateBinary);
-			RegistrationMarkDetector.MarkBounds answerBounds = RegistrationMarkDetector.detectMarkBounds(answerBinary);
-			if (templateBounds == null || answerBounds == null) {
+			RegistrationMarkDetector.MarkSet templateMarks = RegistrationMarkDetector.detectMarks(templateBinary);
+			RegistrationMarkDetector.MarkSet answerMarks = RegistrationMarkDetector.detectMarks(answerBinary);
+			if (templateMarks == null || answerMarks == null) {
 				logger.warning("答卷校准失败：定位黑块不足，使用模板原始坐标。");
 				return CalibrationResult.uncalibrated(source, template);
 			}
 
-			CoordinateTransform transform = CoordinateTransform.from(
-					templateBounds,
-					answerBounds,
+			double sourceScaleX = (double) templateBinary.cols() / source.getImageWidth();
+			double sourceScaleY = (double) templateBinary.rows() / source.getImageHeight();
+			CoordinateTransform transform = affineTransformFromMarks(
+					templateMarks,
+					answerMarks,
+					sourceScaleX,
+					sourceScaleY);
+			boolean affine = transform != null;
+			if (transform == null) {
+				transform = CoordinateTransform.from(
+					templateMarks.bounds(),
+					answerMarks.bounds(),
 					(double) templateBinary.cols() / source.getImageWidth(),
 					(double) templateBinary.rows() / source.getImageHeight());
+			}
 
 			SheetLayout calibrated = transformAnswerSheet(source, transform, answerBinary, answerBinary.cols(), answerBinary.rows());
-			logger.info("答卷校准完成：scaleX=" + String.format("%.5f", transform.scaleX())
+			logger.info("答卷校准完成：" + (affine ? "多定位黑块仿射" : "定位黑块外包框")
+						+ " scaleX=" + String.format("%.5f", transform.scaleX())
 						+ ", scaleY=" + String.format("%.5f", transform.scaleY())
 						+ ", offsetX=" + String.format("%.1f", transform.offsetX())
 						+ ", offsetY=" + String.format("%.1f", transform.offsetY())
-						+ ", marks=" + answerBounds.count());
+						+ ", marks=" + answerMarks.count());
 			return new CalibrationResult(
 					calibrated,
 					transform.transform(template.examRegionRect()),
@@ -56,6 +68,163 @@ public final class SheetCalibrator {
 			logger.warning("答卷校准异常，使用模板原始坐标：" + ex.getMessage());
 			return CalibrationResult.uncalibrated(source, template);
 		}
+	}
+
+	private static CoordinateTransform affineTransformFromMarks(RegistrationMarkDetector.MarkSet templateMarks,
+															   RegistrationMarkDetector.MarkSet answerMarks,
+															   double sourceScaleX,
+															   double sourceScaleY) {
+		List<MarkPair> pairs = matchMarks(templateMarks, answerMarks);
+		if (pairs.size() < 6) {
+			logger.info("定位黑块仿射校准跳过：匹配点不足 " + pairs.size());
+			return null;
+		}
+		double[] xCoeff = solveAffineCoefficients(pairs, true);
+		double[] yCoeff = solveAffineCoefficients(pairs, false);
+		if (xCoeff == null || yCoeff == null) {
+			logger.info("定位黑块仿射校准跳过：矩阵不可解");
+			return null;
+		}
+		double residual = averageResidual(pairs, xCoeff, yCoeff);
+		if (residual > 80) {
+			logger.info("定位黑块仿射校准跳过：平均残差 " + String.format("%.2f", residual) + "px");
+			return null;
+		}
+		logger.info("定位黑块仿射匹配：" + pairs.size() + " 点，平均残差 "
+					+ String.format("%.2f", residual) + "px");
+		return CoordinateTransform.affine(sourceScaleX, sourceScaleY,
+				xCoeff[0], xCoeff[1], xCoeff[2],
+				yCoeff[0], yCoeff[1], yCoeff[2]);
+	}
+
+	private static List<MarkPair> matchMarks(RegistrationMarkDetector.MarkSet templateMarks,
+											 RegistrationMarkDetector.MarkSet answerMarks) {
+		List<MarkPair> candidates = new ArrayList<>();
+		RegistrationMarkDetector.MarkBounds sourceBounds = templateMarks.bounds();
+		RegistrationMarkDetector.MarkBounds targetBounds = answerMarks.bounds();
+		double threshold = 0.08;
+		for (RegistrationMarkDetector.MarkPoint source : templateMarks.centers()) {
+			for (RegistrationMarkDetector.MarkPoint target : answerMarks.centers()) {
+				double distance = normalizedDistance(source, sourceBounds, target, targetBounds);
+				if (distance <= threshold) {
+					candidates.add(new MarkPair(source, target, distance));
+				}
+			}
+		}
+		candidates.sort(Comparator.comparingDouble(MarkPair::normalizedDistance));
+		List<MarkPair> pairs = new ArrayList<>();
+		List<RegistrationMarkDetector.MarkPoint> usedSources = new ArrayList<>();
+		List<RegistrationMarkDetector.MarkPoint> usedTargets = new ArrayList<>();
+		for (MarkPair candidate : candidates) {
+			if (usedSources.contains(candidate.source()) || usedTargets.contains(candidate.target())) {
+				continue;
+			}
+			usedSources.add(candidate.source());
+			usedTargets.add(candidate.target());
+			pairs.add(candidate);
+		}
+		return pairs;
+	}
+
+	private static double normalizedDistance(RegistrationMarkDetector.MarkPoint source,
+											 RegistrationMarkDetector.MarkBounds sourceBounds,
+											 RegistrationMarkDetector.MarkPoint target,
+											 RegistrationMarkDetector.MarkBounds targetBounds) {
+		double sx = normalize(source.x(), sourceBounds.minX(), sourceBounds.maxX());
+		double sy = normalize(source.y(), sourceBounds.minY(), sourceBounds.maxY());
+		double tx = normalize(target.x(), targetBounds.minX(), targetBounds.maxX());
+		double ty = normalize(target.y(), targetBounds.minY(), targetBounds.maxY());
+		return Math.hypot(sx - tx, sy - ty);
+	}
+
+	private static double normalize(double value, double min, double max) {
+		return (value - min) / Math.max(1.0, max - min);
+	}
+
+	private static double[] solveAffineCoefficients(List<MarkPair> pairs, boolean targetX) {
+		double sumX2 = 0;
+		double sumXY = 0;
+		double sumX = 0;
+		double sumY2 = 0;
+		double sumY = 0;
+		double sumT = 0;
+		double sumXT = 0;
+		double sumYT = 0;
+		for (MarkPair pair : pairs) {
+			double x = pair.source().x();
+			double y = pair.source().y();
+			double t = targetX ? pair.target().x() : pair.target().y();
+			sumX2 += x * x;
+			sumXY += x * y;
+			sumX += x;
+			sumY2 += y * y;
+			sumY += y;
+			sumT += t;
+			sumXT += x * t;
+			sumYT += y * t;
+		}
+		double[][] matrix = {
+				{sumX2, sumXY, sumX},
+				{sumXY, sumY2, sumY},
+				{sumX, sumY, pairs.size()}
+		};
+		double[] rhs = {sumXT, sumYT, sumT};
+		return solve3x3(matrix, rhs);
+	}
+
+	private static double[] solve3x3(double[][] matrix, double[] rhs) {
+		double[][] a = new double[3][4];
+		for (int r = 0; r < 3; r++) {
+			System.arraycopy(matrix[r], 0, a[r], 0, 3);
+			a[r][3] = rhs[r];
+		}
+		for (int col = 0; col < 3; col++) {
+			int pivot = col;
+			for (int row = col + 1; row < 3; row++) {
+				if (Math.abs(a[row][col]) > Math.abs(a[pivot][col])) {
+					pivot = row;
+				}
+			}
+			if (Math.abs(a[pivot][col]) < 1e-8) {
+				return null;
+			}
+			if (pivot != col) {
+				double[] tmp = a[pivot];
+				a[pivot] = a[col];
+				a[col] = tmp;
+			}
+			double divisor = a[col][col];
+			for (int c = col; c < 4; c++) {
+				a[col][c] /= divisor;
+			}
+			for (int row = 0; row < 3; row++) {
+				if (row == col) {
+					continue;
+				}
+				double factor = a[row][col];
+				for (int c = col; c < 4; c++) {
+					a[row][c] -= factor * a[col][c];
+				}
+			}
+		}
+		return new double[]{a[0][3], a[1][3], a[2][3]};
+	}
+
+	private static double averageResidual(List<MarkPair> pairs, double[] xCoeff, double[] yCoeff) {
+		double sum = 0;
+		for (MarkPair pair : pairs) {
+			double x = pair.source().x();
+			double y = pair.source().y();
+			double predictedX = xCoeff[0] * x + xCoeff[1] * y + xCoeff[2];
+			double predictedY = yCoeff[0] * x + yCoeff[1] * y + yCoeff[2];
+			sum += Math.hypot(predictedX - pair.target().x(), predictedY - pair.target().y());
+		}
+		return sum / pairs.size();
+	}
+
+	private record MarkPair(RegistrationMarkDetector.MarkPoint source,
+							RegistrationMarkDetector.MarkPoint target,
+							double normalizedDistance) {
 	}
 
 	private static synchronized Mat templateBinary(SheetTemplate template) {

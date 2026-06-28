@@ -225,6 +225,8 @@ public class TemplateLayoutDetector {
 			this.examStartY = firstColY.get(0) - bubbleH / 2;
 			this.examVGap = firstColY.get(1) - firstColY.get(0); // 中心到中心间距
 
+			refineExamLayoutFromRegion(validCols, colGroups, bubbleW, bubbleH);
+
 			examEndY = this.examStartY + 10 * this.examVGap; // 10个值的区域高度
 		} else {
 			// 兜底：用已知模板参数
@@ -233,6 +235,7 @@ public class TemplateLayoutDetector {
 			this.examStartY = 858;
 			this.examHGap = 86;
 			this.examVGap = 58;
+			refineExamLayoutFromRegion(Collections.emptyList(), Collections.emptyMap(), bubbleW, bubbleH);
 			examEndY = this.examStartY + 10 * this.examVGap;
 		}
 
@@ -301,6 +304,102 @@ public class TemplateLayoutDetector {
 
 		// 5. 填空题大框（取底部最大的矩形）
 		inferChoiceColumns(rowGroups, sortedRows, bubbleW, bubbleH);
+	}
+
+	private void refineExamLayoutFromRegion(List<Integer> validCols,
+											 Map<Integer, List<Integer>> colGroups,
+											 int bubbleW,
+											 int bubbleH) {
+		DetectedBox region = findLikelyExamRegionRect();
+		if (region == null || validCols == null || validCols.size() >= 3) {
+			return;
+		}
+
+		int gap = examHGap > 0 ? examHGap : Math.max(1, Math.round(detectedImageW / 2480.0f * 85));
+		int inferredDigits = Math.max(1, region.w / Math.max(1, gap));
+		if (inferredDigits < examIdDigits || inferredDigits == examIdDigits && !validCols.isEmpty()) {
+			return;
+		}
+
+		int firstCenterX = validCols.isEmpty() ? 0 : validCols.get(0);
+		int leftInset;
+		if (firstCenterX > region.x && firstCenterX < region.x + region.w / 2) {
+			leftInset = firstCenterX - region.x - bubbleW / 2;
+		} else {
+			leftInset = (int) Math.round(region.w * 0.065);
+		}
+		leftInset = Math.max(bubbleW / 2, Math.min(leftInset, region.w / 5));
+
+		List<Integer> yCoords = new ArrayList<>();
+		for (int col : validCols) {
+			List<Integer> colYs = colGroups.get(col);
+			if (colYs != null) {
+				yCoords.addAll(colYs);
+			}
+		}
+		List<Integer> yClusters = SheetGeometryUtils.clusterValues(
+				yCoords.stream().mapToInt(Integer::intValue).toArray(), 20);
+		Collections.sort(yClusters);
+		if (yClusters.size() >= 10) {
+			this.examStartY = yClusters.get(0) - bubbleH / 2;
+			this.examVGap = medianGap(yClusters, this.examVGap);
+		} else {
+			this.examStartY = region.y + (int) Math.round(region.h * 0.22);
+			this.examVGap = Math.max(1, (int) Math.round(region.h * 0.075));
+		}
+
+		this.examIdDigits = inferredDigits;
+		this.examStartX = region.x + leftInset;
+		this.examHGap = gap;
+		logger.info(String.format(
+				"[DEBUG] 准考证专项网格兜底: region=(%d,%d,%d,%d), digits=%d, start=(%d,%d), gap=(%d,%d)",
+				region.x, region.y, region.w, region.h,
+				examIdDigits, examStartX, examStartY, examHGap, examVGap));
+	}
+
+	private DetectedBox findLikelyExamRegionRect() {
+		if (allRects == null || detectedImageW <= 0 || detectedImageH <= 0) {
+			return null;
+		}
+		DetectedBox best = null;
+		int bestArea = 0;
+		for (DetectedBox r : allRects) {
+			int area = r.w * r.h;
+			if (area < 50000) continue;
+			double aspect = (double) r.w / Math.max(1, r.h);
+			boolean likelyExamRegion = r.x > detectedImageW * 0.45
+									   && r.y > detectedImageH * 0.12
+									   && r.y < detectedImageH * 0.45
+									   && r.w >= detectedImageW * 0.20
+									   && r.w <= detectedImageW * 0.50
+									   && r.h >= detectedImageH * 0.12
+									   && r.h <= detectedImageH * 0.35
+									   && aspect >= 0.8
+									   && aspect <= 1.6;
+			if (likelyExamRegion && area > bestArea) {
+				best = r;
+				bestArea = area;
+			}
+		}
+		return best;
+	}
+
+	private int medianGap(List<Integer> sortedValues, int fallback) {
+		if (sortedValues == null || sortedValues.size() < 2) {
+			return fallback;
+		}
+		List<Integer> gaps = new ArrayList<>();
+		for (int i = 1; i < sortedValues.size(); i++) {
+			int gap = sortedValues.get(i) - sortedValues.get(i - 1);
+			if (gap > 0) {
+				gaps.add(gap);
+			}
+		}
+		if (gaps.isEmpty()) {
+			return fallback;
+		}
+		Collections.sort(gaps);
+		return gaps.get(gaps.size() / 2);
 	}
 
 	private int[] inferMarkBoxSize() {

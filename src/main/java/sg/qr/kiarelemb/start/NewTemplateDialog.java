@@ -39,27 +39,37 @@ import java.util.List;
 public class NewTemplateDialog extends QRDialog {
 	private final File pictureFile;
 	private final List<File> pictureFiles;
+	private final File sourceFile;
 	private final int pageCount;
 	private TemplateLayoutDetector detector;
 	private final TemplateAnalysisPane dataSplitPane;
 	private QRTextField nameField;
 
 	public NewTemplateDialog(File pictureFile) {
-		this(singlePictureFile(pictureFile));
+		this(singlePictureFile(pictureFile), pictureFile);
 	}
 
 	public NewTemplateDialog(File pictureFile, int pageCount) {
-		this(singlePictureFile(pictureFile), pageCount);
+		this(singlePictureFile(pictureFile), pictureFile, pageCount);
 	}
 
 	public NewTemplateDialog(List<File> pictureFiles) {
-		this(pictureFiles, pictureFiles == null ? 1 : pictureFiles.size());
+		this(pictureFiles, pictureFiles == null || pictureFiles.isEmpty() ? null : pictureFiles.get(0));
+	}
+
+	public NewTemplateDialog(List<File> pictureFiles, File sourceFile) {
+		this(pictureFiles, sourceFile, pictureFiles == null ? 1 : pictureFiles.size());
 	}
 
 	public NewTemplateDialog(List<File> pictureFiles, int pageCount) {
+		this(pictureFiles, pictureFiles == null || pictureFiles.isEmpty() ? null : pictureFiles.get(0), pageCount);
+	}
+
+	public NewTemplateDialog(List<File> pictureFiles, File sourceFile, int pageCount) {
 		super(MainWindow.INSTANCE);
 		this.pictureFiles = normalizedPictureFiles(pictureFiles);
 		this.pictureFile = this.pictureFiles.get(0);
+		this.sourceFile = sourceFile == null ? this.pictureFile : sourceFile;
 		this.pageCount = Math.max(1, pageCount);
 		this.dataSplitPane = new TemplateAnalysisPane(null);
 		initView();
@@ -68,7 +78,7 @@ public class NewTemplateDialog extends QRDialog {
 	@Override
 	public void windowOpened(WindowEvent e) {
 		this.detector = detectTemplate(pictureFile);
-		this.dataSplitPane.setTemplate(detector == null ? null : buildTemplate(defaultTemplateName(pictureFile)));
+		this.dataSplitPane.setTemplate(detector == null ? null : buildTemplate(defaultTemplateName(sourceFile)));
 	}
 
 	private TemplateLayoutDetector detectTemplate(File pictureFile) {
@@ -104,8 +114,8 @@ public class NewTemplateDialog extends QRDialog {
 		nameField = new QRTextField(QRTextField.TYPE.FILE_NAME);
 		nameField.setTextLeft();
 		nameField.setPreferredSize(new Dimension(220, 25));
-		if (pictureFile != null) {
-			nameField.setText(defaultTemplateName(pictureFile));
+		if (sourceFile != null) {
+			nameField.setText(defaultTemplateName(sourceFile));
 		}
 
 		QRPanel namePanel = new QRPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));

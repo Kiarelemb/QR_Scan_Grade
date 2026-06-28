@@ -36,6 +36,17 @@ record RawScorePolicy(int lineNumber, String questionType, List<Integer> questio
 		return new RawScorePolicy(lineNumber, questionType, questionNumbers, totalScore);
 	}
 
+	static List<Integer> parseQuestionRanges(String[] parts, int startIndex, int lineNumber, int questionCount) {
+		Set<Integer> numbers = new LinkedHashSet<>();
+		for (int i = startIndex; i < parts.length; i++) {
+			numbers.addAll(parseQuestionRange(parts[i].trim(), lineNumber, questionCount));
+		}
+		if (numbers.isEmpty()) {
+			throw new ResultsPanel.ScoreRuleException(lineNumber, "第 " + lineNumber + " 行没有有效题号。");
+		}
+		return new ArrayList<>(numbers);
+	}
+
 	public ScorePolicy toScoreRule() {
 		return new ScorePolicy(questionType, questionNumbers, totalScore);
 	}

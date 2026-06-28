@@ -1,20 +1,22 @@
 package sg.qr.kiarelemb;
 
 import method.qr.kiarelemb.utils.QRLoggerUtils;
-import sg.qr.kiarelemb.component.ProjectStateSaver;
 import sg.qr.kiarelemb.component.SplitPane;
 import sg.qr.kiarelemb.data.Keys;
-import sg.qr.kiarelemb.exam.ObjectiveReviewPanel;
 import sg.qr.kiarelemb.exam.ManualScoringPanel;
+import sg.qr.kiarelemb.exam.ObjectiveReviewPanel;
+import sg.qr.kiarelemb.exam.ObjectiveReviewTextPane;
 import sg.qr.kiarelemb.exam.SubjectiveOcrReviewPanel;
-import sg.qr.kiarelemb.exam.results.ResultsPanel;
+import sg.qr.kiarelemb.exam.inter.ProjectStateSaver;
 import sg.qr.kiarelemb.exam.model.GradingProject;
 import sg.qr.kiarelemb.exam.model.SheetTemplate;
 import sg.qr.kiarelemb.exam.processing.DocumentPageLoader;
 import sg.qr.kiarelemb.exam.processing.SheetTemplateFileStore;
+import sg.qr.kiarelemb.exam.results.ResultsPanel;
 import sg.qr.kiarelemb.menu.data.EnglishScoreInput;
 import sg.qr.kiarelemb.menu.type.SettingsItem;
 import sg.qr.kiarelemb.res.Info;
+import sg.qr.kiarelemb.start.StartPanel;
 import swing.qr.kiarelemb.QRSwing;
 import swing.qr.kiarelemb.basic.QRButton;
 import swing.qr.kiarelemb.task.QRTaskRunner;
@@ -48,7 +50,7 @@ public class MainWindow extends QRFrame {
 		//菜单
 		menuInit();
 
-		setCenterComponent(SplitPane.SPLIT_PANE);
+		setCenterComponent(StartPanel.START_PANEL);
 
 		setTitleCenter();
 		setCloseButtonSystemExit();
@@ -87,7 +89,7 @@ public class MainWindow extends QRFrame {
 		try {
 			File singlePdf = DocumentPageLoader.singlePdfFile(answerDir);
 			if (singlePdf != null
-				&& DocumentPageLoader.convertedPdfImages(singlePdf).size() < DocumentPageLoader.pdfPageCount(singlePdf)) {
+			    && DocumentPageLoader.convertedPdfImages(singlePdf).size() < DocumentPageLoader.pdfPageCount(singlePdf)) {
 				needsConversion = true;
 			}
 		} catch (IOException e) {
@@ -137,7 +139,7 @@ public class MainWindow extends QRFrame {
 		try {
 			SheetTemplate template = SheetTemplateFileStore.load(new File(project.templateFilePath()));
 			return shouldShowMachineSubjectiveReview(project, template)
-				   || shouldShowManualReview(project, template);
+			       || shouldShowManualReview(project, template);
 		} catch (Exception ex) {
 			logger.warning("Cannot check subjective review progress: " + ex.getMessage());
 			return false;
@@ -146,12 +148,12 @@ public class MainWindow extends QRFrame {
 
 	private boolean shouldShowMachineSubjectiveReview(GradingProject project, SheetTemplate template) {
 		return SubjectiveOcrReviewPanel.hasSubjectiveQuestions(project, template)
-			   && !project.allSubjectiveAnswersSaved();
+		       && !project.allSubjectiveAnswersSaved();
 	}
 
 	private boolean shouldShowManualReview(GradingProject project, SheetTemplate template) {
 		return ManualScoringPanel.hasManualQuestions(project, template)
-			   && !ManualScoringPanel.allManualScoresSaved(project, template);
+		       && !ManualScoringPanel.allManualScoresSaved(project, template);
 	}
 
 	public void showProjectReview(GradingProject project) {
@@ -181,8 +183,9 @@ public class MainWindow extends QRFrame {
 	}
 
 	public void showStartPanel() {
-		setCenterComponent(SplitPane.SPLIT_PANE);
-		SplitPane.SPLIT_PANE.showStartPanel();
+		ObjectiveReviewTextPane.CHOICE_CHECK_TEXT_PANE.setReviewAnswerChangeListener(null);
+		ObjectiveReviewTextPane.CHOICE_CHECK_TEXT_PANE.clearReviewAnswers();
+		setCenterComponent(StartPanel.START_PANEL);
 	}
 
 	public void setCenterComponent(Component component) {

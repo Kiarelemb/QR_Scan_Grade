@@ -41,6 +41,8 @@ public class ResultsPanel extends QRPanel {
 
 	private static final String MODE_NORMAL = "普通算分";
 	private static final String MODE_SCALE = "尺度算分";
+	private static final String DISCARD_RULE = "废题";
+	private static final String KEEP_RULE = "非废题";
 	public static final int FIELD_HEIGHT = 28;
 
 	private final GradingProject project;
@@ -192,11 +194,14 @@ public class ResultsPanel extends QRPanel {
 		}
 		int count = standardAnswerCount();
 		if (count == 0) {
-			return "# 每行格式：题型 题号范围 总分\n# 示例：选择 1-40 80\n";
+			return "# 每行格式：题型 题号范围 总分\n"
+				   + "# 尺度算分可选：废题 1 3 5-8；非废题 2 4\n"
+				   + "# 示例：选择 1-40 80\n";
 		}
 		return "# 每行格式：题型 题号范围 总分\n"
 			   + "# 示例：单词 1-10 20\n"
 			   + "# 多个范围可用逗号隔开，如：用语 11-15,20 10\n\n"
+			   + "# 尺度算分可选：废题 1 3 5-8；非废题 2 4\n\n"
 			   + "选择 1-" + count + " " + count + "\n";
 	}
 
@@ -405,12 +410,15 @@ public class ResultsPanel extends QRPanel {
 	}
 
 	private QuestionScorePolicy.ScaleScoreReport calculateScaleScoreReport(QuestionScorePolicy.Config config, String rulesText) {
+		ManualDiscardDirectives directives = parseManualDiscardDirectives(rulesText, standardAnswerCount());
 		return new QuestionScorePolicy(
 				project.standardAnswers(),
 				project.combinedAnswersByExamId(),
 				parseScaleSections(rulesText, standardAnswerCount()),
 				entranceEnglishScores,
-				config
+				config,
+				directives.discardQuestionIndices(),
+				directives.keepQuestionIndices()
 		).calculateScaleScores();
 	}
 
@@ -547,6 +555,9 @@ public class ResultsPanel extends QRPanel {
 				continue;
 			}
 			String[] parts = line.split("[ \\t]+");
+			if (isDiscardDirective(parts[0])) {
+				continue;
+			}
 			if (parts.length < 2) {
 				continue;
 			}
@@ -830,6 +841,10 @@ public class ResultsPanel extends QRPanel {
 			if (line.isBlank()) {
 				continue;
 			}
+			String[] parts = line.split("[ \\t]+");
+			if (isDiscardDirective(parts[0])) {
+				continue;
+			}
 			RawScorePolicy rawRule = RawScorePolicy.parse(line, i + 1, questionCount);
 			if (rawRule.totalScore() == null) {
 				pending.add(rawRule);
@@ -866,6 +881,10 @@ public class ResultsPanel extends QRPanel {
 			if (line.isBlank()) {
 				continue;
 			}
+			String[] parts = line.split("[ \\t]+");
+			if (isDiscardDirective(parts[0])) {
+				continue;
+			}
 			RawScorePolicy rawRule = RawScorePolicy.parse(line, i + 1, questionCount);
 			if (rawRule.totalScore() == null) {
 				pending.add(rawRule);
@@ -891,6 +910,47 @@ public class ResultsPanel extends QRPanel {
 		return rules;
 	}
 
+	private ManualDiscardDirectives parseManualDiscardDirectives(String text, int questionCount) {
+		if (questionCount <= 0) {
+			return ManualDiscardDirectives.empty();
+		}
+		Map<Integer, Boolean> overrides = new LinkedHashMap<>();
+		String value = text == null ? "" : text;
+		String[] lines = value.split("\\R");
+		for (int i = 0; i < lines.length; i++) {
+			String line = Utils.stripComment(lines[i]).trim();
+			if (line.isBlank()) {
+				continue;
+			}
+			String[] parts = line.split("[ \\t]+");
+			if (!isDiscardDirective(parts[0])) {
+				continue;
+			}
+			if (parts.length < 2) {
+				throw new ScoreRuleException(i + 1, "第 " + (i + 1) + " 行废题规则缺少题号。");
+			}
+			boolean discard = DISCARD_RULE.equals(parts[0]);
+			for (Integer questionNumber : RawScorePolicy.parseQuestionRanges(parts, 1, i + 1, questionCount)) {
+				overrides.put(questionNumber - 1, discard);
+			}
+		}
+
+		Set<Integer> discardQuestionIndices = new LinkedHashSet<>();
+		Set<Integer> keepQuestionIndices = new LinkedHashSet<>();
+		for (Map.Entry<Integer, Boolean> entry : overrides.entrySet()) {
+			if (entry.getValue()) {
+				discardQuestionIndices.add(entry.getKey());
+			} else {
+				keepQuestionIndices.add(entry.getKey());
+			}
+		}
+		return new ManualDiscardDirectives(discardQuestionIndices, keepQuestionIndices);
+	}
+
+	private boolean isDiscardDirective(String sectionName) {
+		return DISCARD_RULE.equals(sectionName) || KEEP_RULE.equals(sectionName);
+	}
+
 	public static final class ScoreRuleException extends IllegalArgumentException {
 		private final int lineNumber;
 
@@ -909,6 +969,12 @@ public class ResultsPanel extends QRPanel {
 
 	private record CalculateResult(ScoringPlan scorePlan, List<ScoreOutcome> scoreResults, List<String> exportRows,
 								   QuestionScorePolicy.ScaleScoreReport scaleReport, boolean scaleMode) {
+	}
+
+	private record ManualDiscardDirectives(Set<Integer> discardQuestionIndices, Set<Integer> keepQuestionIndices) {
+		private static ManualDiscardDirectives empty() {
+			return new ManualDiscardDirectives(Set.of(), Set.of());
+		}
 	}
 
 	private final class ExamineeIdVerifyDialog extends QRDialog {

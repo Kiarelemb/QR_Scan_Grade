@@ -9,6 +9,8 @@ public final class QuestionScorePolicy {
 	private final Map<String, String> recognizedAnswers;
 	private final List<ScoreSection> sections;
 	private final Map<String, BigDecimal> entranceEnglishScores;
+	private final Set<Integer> manualDiscardQuestionIndices;
+	private final Set<Integer> manualKeepQuestionIndices;
 	private final Config config;
 	private final int totalQuestions;
 
@@ -17,10 +19,22 @@ public final class QuestionScorePolicy {
 							   List<ScoreSection> sections,
 							   Map<String, BigDecimal> entranceEnglishScores,
 							   Config config) {
+		this(standardAnswers, recognizedAnswers, sections, entranceEnglishScores, config, Set.of(), Set.of());
+	}
+
+	public QuestionScorePolicy(String[] standardAnswers,
+							   Map<String, String> recognizedAnswers,
+							   List<ScoreSection> sections,
+							   Map<String, BigDecimal> entranceEnglishScores,
+							   Config config,
+							   Set<Integer> manualDiscardQuestionIndices,
+							   Set<Integer> manualKeepQuestionIndices) {
 		this.correctAnswers = standardAnswers == null ? new String[0] : standardAnswers.clone();
 		this.recognizedAnswers = recognizedAnswers == null ? Map.of() : new LinkedHashMap<>(recognizedAnswers);
 		this.sections = sections == null ? List.of() : List.copyOf(sections);
 		this.entranceEnglishScores = entranceEnglishScores == null ? Map.of() : new LinkedHashMap<>(entranceEnglishScores);
+		this.manualDiscardQuestionIndices = manualDiscardQuestionIndices == null ? Set.of() : Set.copyOf(manualDiscardQuestionIndices);
+		this.manualKeepQuestionIndices = manualKeepQuestionIndices == null ? Set.of() : Set.copyOf(manualKeepQuestionIndices);
 		this.config = config == null ? Config.defaults() : config.normalized();
 		this.totalQuestions = this.correctAnswers.length;
 	}
@@ -140,7 +154,9 @@ public final class QuestionScorePolicy {
 	private boolean[] computeDiscardedQuestions(double[] rawRate) {
 		boolean[] discarded = new boolean[rawRate.length];
 		for (int i = 0; i < rawRate.length; i++) {
-			discarded[i] = rawRate[i] <= config.discardBelowP() || rawRate[i] >= config.discardAboveP();
+			boolean autoDiscarded = rawRate[i] <= config.discardBelowP() || rawRate[i] >= config.discardAboveP();
+			discarded[i] = manualDiscardQuestionIndices.contains(i)
+						   || (autoDiscarded && !manualKeepQuestionIndices.contains(i));
 		}
 		return discarded;
 	}

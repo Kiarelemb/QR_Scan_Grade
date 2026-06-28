@@ -1,4 +1,4 @@
-package sg.qr.kiarelemb.component;
+package sg.qr.kiarelemb.exam.inter;
 
 public interface ProjectStateSaver {
 	void saveProjectState();

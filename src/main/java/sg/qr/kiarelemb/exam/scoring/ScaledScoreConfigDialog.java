@@ -147,7 +147,9 @@ public class ScaledScoreConfigDialog extends QRDialog {
 				
 				epsilon：极小保护值，防止对数、除法出现 0。一般保持默认即可。
 				
-				discard.low.p / discard.high.p：废题正确率边界。正确率小于等于 discard.low.p，或大于等于 discard.high.p 的题会被视为废题，该题不赋分，所在大题分值分配给其他未废题。默认 -1 和 2 表示关闭废题判定。
+				discard.low.p / discard.high.p：废题正确率边界。正确率小于等于 discard.low.p，或大于等于 discard.high.p 的题会被视为废题，该题不赋分，所在大题分值分配给其他未废题。默认 -1 和 2 表示关闭自动废题判定。
+				
+				手动废题：可在算分界面左侧计分规则中加入“废题 1 3 5-8”或“非废题 2 4”。废题会强制废除对应题；非废题会保留对应题，即使它满足自动废题正确率边界。同一题多次出现时，以更靠后的废题/非废题指令为准。
 				
 				算分流程：
 				1. 统计每题正确率 p。

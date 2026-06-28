@@ -3,8 +3,9 @@ package sg.qr.kiarelemb;
 import method.qr.kiarelemb.utils.*;
 import sg.qr.kiarelemb.data.Keys;
 import sg.qr.kiarelemb.res.Info;
-import sg.qr.kiarelemb.setting.SettingWindow;
 import swing.qr.kiarelemb.QRSwing;
+import swing.qr.kiarelemb.task.QRTaskRunner;
+import swing.qr.kiarelemb.window.utils.QRProgressDialog;
 
 import javax.swing.*;
 import java.awt.*;
@@ -24,8 +25,8 @@ public class Enter {
 	public static void main(String[] args) {
 		// 初始化 JDK 自带的 Logger
 		QRLoggerUtils.prefix = "sg";
+		QRLoggerUtils.classMsgMaxLength = 130;
 		QRLoggerUtils.initLogger(Level.INFO, Level.CONFIG);
-		QRLoggerUtils.classMsgMaxLength = 120;
 		logger = QRLoggerUtils.getLogger(Enter.class);
 		QRTimeCountUtil qcu = new QRTimeCountUtil();
 		QRSwing.start("res/settings/setting.properties", "res/settings/window.properties");
@@ -36,25 +37,27 @@ public class Enter {
 		QRSwing.windowIcon = new ImageIcon(Info.ICON_PNG_PATH);
 		QRSwing.setWindowTitleMenu(true);
 
-//		FlashLoadingWindow flw = new FlashLoadingWindow();
-//		flw.setVisible(true);
+		QRProgressDialog loadDialog = new QRProgressDialog(null, false);
+		loadDialog.setIndeterminate(true);
+		loadDialog.setCancelButtonVisible(false);
+		loadDialog.setProgressDescription("");
+//		loadDialog.setProgressDescription("正在加载");
+		QRTaskRunner.run(context -> {
+			loadDialog.setVisible(true);
+			return "完成";
+		});
 
 		variousLoad();
-//		QRSleepUtils.sleepSec(100);
-
-//		flw.setVisible(false);
 
 		logger.info("-------------------------------------- 配置加载完毕 --------------------------------------");
+		loadDialog.setVisible(false);
 		QRSystemUtils.setWindowShowSlowly(MainWindow.INSTANCE, QRSwing.windowTransparency);
 	}
 
-
-	private static final String INPUT_PATH = "ans/AnswerSheet_test_001.png";
-	private static final String OUTPUT_DIR = "ans/output/";
-
-
 	private static void variousLoad() {
 		logger.info("当前系统：" + QRSystemUtils.getSystemName());
+
+//		QRSleepUtils.sleepSec(10);
 
 		//region 全局界面字体
 		Font font = null;
@@ -89,8 +92,8 @@ public class Enter {
 		QRSwing.registerGlobalEventWindow(MainWindow.INSTANCE);
 
 		//提前加载一遍试试
-		SettingWindow.INSTANCE.setVisible(false);
-		logger.config("设置窗口预加载完毕。");
+		//SettingWindow.INSTANCE.setVisible(false);
+//		logger.config("设置窗口预加载完毕。");
 
 	}
 }

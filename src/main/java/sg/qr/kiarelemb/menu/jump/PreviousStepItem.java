@@ -26,7 +26,7 @@ public class PreviousStepItem extends MenuItem {
 	private Step step = Step.NONE;
 	private GradingProject project;
 
-	public PreviousStepItem() {
+	private PreviousStepItem() {
 		super("上一步", Keys.QUICK_KEY_PREVIOUS_STEP);
 		setEnabled(false);
 	}

@@ -15,8 +15,8 @@ import swing.qr.kiarelemb.task.QRTaskOptions;
 import swing.qr.kiarelemb.task.QRTaskRunner;
 import swing.qr.kiarelemb.task.QRTaskWorker;
 import swing.qr.kiarelemb.theme.QRColorsAndFonts;
-import swing.qr.kiarelemb.window.basic.QRDialog;
 import swing.qr.kiarelemb.window.enhance.QROpinionDialog;
+import swing.qr.kiarelemb.window.utils.QRTextInputDialog;
 
 import javax.swing.*;
 import javax.swing.border.LineBorder;
@@ -976,37 +976,20 @@ public class ResultsPanel extends QRPanel {
 		}
 	}
 
-	private final class ExamineeIdVerifyDialog extends QRDialog {
-		private final QRTextPane textPane = new QRTextPane();
+	private final class ExamineeIdVerifyDialog extends QRTextInputDialog {
 
 		private ExamineeIdVerifyDialog() {
-			super(MainWindow.INSTANCE);
-			setTitle("校对考生准考证号");
-			setTitlePlace(CENTER);
-			setSize(680, 560);
-			setLocationRelativeTo(MainWindow.INSTANCE);
-			setParentWindowNotFollowMove();
+			super(MainWindow.INSTANCE, "校对考生准考证号", 680, 560);
+		}
 
-			mainPanel.setLayout(new BorderLayout(5, 5));
-			QRPanel center = new QRPanel(false, new BorderLayout());
-			center.setBorder(new LineBorder(QRColorsAndFonts.LINE_COLOR, 3));
-			textPane.addUndoManager();
+		@Override
+		protected void initTextPane() {
 			textPane.setLineWrap(false);
-			textPane.setText(defaultMappingText());
-			center.add(textPane.addScrollPane(), BorderLayout.CENTER);
-			mainPanel.add(center, BorderLayout.CENTER);
+		}
 
-			QRPanel bottom = new QRPanel(false, new FlowLayout(FlowLayout.RIGHT, 8, 0));
-			bottom.setBorder(new LineBorder(QRColorsAndFonts.FRAME_COLOR_BACK, 10));
-			QRRoundButton cancelButton = new QRRoundButton("取消");
-			cancelButton.setPreferredSize(new Dimension(80, 30));
-			cancelButton.addClickAction(event -> dispose());
-			QRRoundButton saveButton = new QRRoundButton("保存");
-			saveButton.setPreferredSize(new Dimension(80, 30));
-			saveButton.addClickAction(this::save);
-			bottom.add(cancelButton);
-			bottom.add(saveButton);
-			mainPanel.add(bottom, BorderLayout.SOUTH);
+		@Override
+		protected String initialText() {
+			return defaultMappingText();
 		}
 
 		private String defaultMappingText() {
@@ -1037,7 +1020,8 @@ public class ResultsPanel extends QRPanel {
 			return builder.toString();
 		}
 
-		private void save(ActionEvent event) {
+		@Override
+		protected void onSave() {
 			Map<String, String> mapping = parseMapping();
 			if (mapping == null) {
 				return;
@@ -1055,7 +1039,7 @@ public class ResultsPanel extends QRPanel {
 			lastScaleReport = null;
 			lastResultScaleMode = false;
 			FinishProjectButton.END_PROJECT.setEnabled(false);
-			previewScores((ActionEvent) null);
+			previewScores(null);
 			summaryLabel.setText("已保存准考证号校对结果，请重新计算成绩。");
 			QROpinionDialog.messageTellShow(this, "准考证号校对结果已保存。");
 			dispose();

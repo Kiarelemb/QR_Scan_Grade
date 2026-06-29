@@ -152,16 +152,16 @@ public class TemplateLayoutDetector {
 		Map<Integer, List<Integer>> colGroups = new LinkedHashMap<>();
 		List<DetectedBox> examCandidates = new ArrayList<>();
 		for (DetectedBox r : allRects) {
-			if (Math.abs(r.w - bubbleW) > 10 || Math.abs(r.h - bubbleH) > 10) continue;
+			if (Math.abs(r.w() - bubbleW) > 10 || Math.abs(r.h() - bubbleH) > 10) continue;
 			examCandidates.add(r);
 		}
 		List<Integer> xClusters = SheetGeometryUtils.clusterValues(
-				examCandidates.stream().mapToInt(r -> r.cx).toArray(), 25);
+				examCandidates.stream().mapToInt(r -> r.cx()).toArray(), 25);
 		for (DetectedBox r : examCandidates) {
 			int colKey = xClusters.stream()
-					.min(Comparator.comparingInt(k -> Math.abs(k - r.cx)))
-					.orElse(r.cx);
-			colGroups.computeIfAbsent(colKey, k -> new ArrayList<>()).add(r.cy);
+					.min(Comparator.comparingInt(k -> Math.abs(k - r.cx())))
+					.orElse(r.cx());
+			colGroups.computeIfAbsent(colKey, k -> new ArrayList<>()).add(r.cy());
 		}
 		List<Integer> sortedCols = new ArrayList<>(colGroups.keySet());
 		Collections.sort(sortedCols);
@@ -245,13 +245,13 @@ public class TemplateLayoutDetector {
 		// 先用容差聚类把同一行的气泡归为一组
 		List<DetectedBox> choiceRects = new ArrayList<>();
 		for (DetectedBox r : allRects) {
-			if (Math.abs(r.w - bubbleW) > 10 || Math.abs(r.h - bubbleH) > 10) continue;
-			if (r.cy <= examEndY + 50) continue;
+			if (Math.abs(r.w() - bubbleW) > 10 || Math.abs(r.h() - bubbleH) > 10) continue;
+			if (r.cy() <= examEndY + 50) continue;
 			choiceRects.add(r);
 		}
 
 		// 按 Y 坐标聚类（容差15px）
-		int[] yValues = choiceRects.stream().mapToInt(r -> r.cy).sorted().toArray();
+		int[] yValues = choiceRects.stream().mapToInt(r -> r.cy()).sorted().toArray();
 		List<Integer> yClusters = SheetGeometryUtils.clusterValues(yValues, 15);
 
 		// 构建 rowGroups 和 rowRectGroups（key = 聚类后的代表Y值）
@@ -260,9 +260,9 @@ public class TemplateLayoutDetector {
 		for (DetectedBox r : choiceRects) {
 			// 找到最近的聚类中心
 			int rowKey = yClusters.stream()
-					.min(Comparator.comparingInt(k -> Math.abs(k - r.cy)))
-					.orElse(r.cy);
-			rowGroups.computeIfAbsent(rowKey, k -> new ArrayList<>()).add(r.cx);
+					.min(Comparator.comparingInt(k -> Math.abs(k - r.cy())))
+					.orElse(r.cy());
+			rowGroups.computeIfAbsent(rowKey, k -> new ArrayList<>()).add(r.cx());
 			rowRectGroups.computeIfAbsent(rowKey, k -> new ArrayList<>()).add(r);
 		}
 		List<Integer> sortedRows = new ArrayList<>(rowGroups.keySet());
@@ -293,8 +293,8 @@ public class TemplateLayoutDetector {
 				List<DetectedBox> currRow = rowRectGroups.get(sortedRows.get(i));
 				if (prevRow.size() >= 3 && currRow.size() >= 3) {
 					// 取两行的平均中心Y坐标
-					int prevAvgY = (int) prevRow.stream().mapToInt(r -> r.cy).average().orElse(0);
-					int currAvgY = (int) currRow.stream().mapToInt(r -> r.cy).average().orElse(0);
+					int prevAvgY = (int) prevRow.stream().mapToInt(r -> r.cy()).average().orElse(0);
+					int currAvgY = (int) currRow.stream().mapToInt(r -> r.cy()).average().orElse(0);
 					centerGaps.add(currAvgY - prevAvgY);
 				}
 			}
@@ -318,19 +318,19 @@ public class TemplateLayoutDetector {
 		}
 
 		int gap = examHGap > 0 ? examHGap : Math.max(1, Math.round(detectedImageW / 2480.0f * 85));
-		int inferredDigits = Math.max(1, region.w / Math.max(1, gap));
+		int inferredDigits = Math.max(1, region.w() / Math.max(1, gap));
 		if (inferredDigits < examIdDigits || inferredDigits == examIdDigits && !validCols.isEmpty()) {
 			return;
 		}
 
 		int firstCenterX = validCols.isEmpty() ? 0 : validCols.get(0);
 		int leftInset;
-		if (firstCenterX > region.x && firstCenterX < region.x + region.w / 2) {
-			leftInset = firstCenterX - region.x - bubbleW / 2;
+		if (firstCenterX > region.x() && firstCenterX < region.x() + region.w() / 2) {
+			leftInset = firstCenterX - region.x() - bubbleW / 2;
 		} else {
-			leftInset = (int) Math.round(region.w * 0.065);
+			leftInset = (int) Math.round(region.w() * 0.065);
 		}
-		leftInset = Math.max(bubbleW / 2, Math.min(leftInset, region.w / 5));
+		leftInset = Math.max(bubbleW / 2, Math.min(leftInset, region.w() / 5));
 
 		List<Integer> yCoords = new ArrayList<>();
 		for (int col : validCols) {
@@ -346,16 +346,16 @@ public class TemplateLayoutDetector {
 			this.examStartY = yClusters.get(0) - bubbleH / 2;
 			this.examVGap = medianGap(yClusters, this.examVGap);
 		} else {
-			this.examStartY = region.y + (int) Math.round(region.h * 0.22);
-			this.examVGap = Math.max(1, (int) Math.round(region.h * 0.075));
+			this.examStartY = region.y() + (int) Math.round(region.h() * 0.22);
+			this.examVGap = Math.max(1, (int) Math.round(region.h() * 0.075));
 		}
 
 		this.examIdDigits = inferredDigits;
-		this.examStartX = region.x + leftInset;
+		this.examStartX = region.x() + leftInset;
 		this.examHGap = gap;
 		logger.info(String.format(
 				"[DEBUG] 准考证专项网格兜底: region=(%d,%d,%d,%d), digits=%d, start=(%d,%d), gap=(%d,%d)",
-				region.x, region.y, region.w, region.h,
+				region.x(), region.y(), region.w(), region.h(),
 				examIdDigits, examStartX, examStartY, examHGap, examVGap));
 	}
 
@@ -366,16 +366,16 @@ public class TemplateLayoutDetector {
 		DetectedBox best = null;
 		int bestArea = 0;
 		for (DetectedBox r : allRects) {
-			int area = r.w * r.h;
+			int area = r.w() * r.h();
 			if (area < 50000) continue;
-			double aspect = (double) r.w / Math.max(1, r.h);
-			boolean likelyExamRegion = r.x > detectedImageW * 0.45
-			                           && r.y > detectedImageH * 0.12
-			                           && r.y < detectedImageH * 0.45
-			                           && r.w >= detectedImageW * 0.20
-			                           && r.w <= detectedImageW * 0.50
-			                           && r.h >= detectedImageH * 0.12
-			                           && r.h <= detectedImageH * 0.35
+			double aspect = (double) r.w() / Math.max(1, r.h());
+			boolean likelyExamRegion = r.x() > detectedImageW * 0.45
+			                           && r.y() > detectedImageH * 0.12
+			                           && r.y() < detectedImageH * 0.45
+			                           && r.w() >= detectedImageW * 0.20
+			                           && r.w() <= detectedImageW * 0.50
+			                           && r.h() >= detectedImageH * 0.12
+			                           && r.h() <= detectedImageH * 0.35
 			                           && aspect >= 0.8
 			                           && aspect <= 1.6;
 			if (likelyExamRegion && area > bestArea) {
@@ -409,12 +409,12 @@ public class TemplateLayoutDetector {
 		Map<String, Integer> fallbackSizeMap = new HashMap<>();
 		for (DetectedBox r : allRects) {
 			if (!TemplateLayoutDetectorUtils.isBubbleCandidate(r)) continue;
-			String key = r.w + "x" + r.h;
+			String key = r.w() + "x" + r.h();
 			fallbackSizeMap.put(key, fallbackSizeMap.getOrDefault(key, 0) + 1);
 
-			double aspect = (double) r.w / Math.max(1, r.h);
-			boolean markBoxLike = r.w >= 35 && r.w <= 55
-			                      && r.h >= 20 && r.h <= 35
+			double aspect = (double) r.w() / Math.max(1, r.h());
+			boolean markBoxLike = r.w() >= 35 && r.w() <= 55
+			                      && r.h() >= 20 && r.h() <= 35
 			                      && aspect >= 1.25 && aspect <= 2.2;
 			if (markBoxLike) {
 				preferredSizeMap.put(key, preferredSizeMap.getOrDefault(key, 0) + 1);
@@ -452,16 +452,7 @@ public class TemplateLayoutDetector {
 	private void inferChoiceColumns(Map<Integer, List<Integer>> rowGroups,
 	                                List<Integer> sortedRows,
 	                                int bubbleW, int bubbleH) {
-		class RowInfo {
-			final int y;
-			final List<Integer> colStarts;
-			final List<Integer> optionCounts;
-
-			RowInfo(int y, List<Integer> colStarts, List<Integer> optionCounts) {
-				this.y = y;
-				this.colStarts = colStarts;
-				this.optionCounts = optionCounts;
-			}
+		record RowInfo(int y, List<Integer> colStarts, List<Integer> optionCounts) {
 		}
 
 		List<RowInfo> rowInfos = new ArrayList<>();
@@ -783,7 +774,7 @@ public class TemplateLayoutDetector {
 
 		List<DetectedBox> largeRects = new ArrayList<>();
 		for (DetectedBox r : allRects) {
-			if (r.w * r.h > 50000) { // 大框阈值
+			if (r.w() * r.h() > 50000) { // 大框阈值
 				largeRects.add(r);
 			}
 		}
@@ -805,24 +796,24 @@ public class TemplateLayoutDetector {
 				int examEndY = examStartY + examIdDigits * (examBubbleH + examVGap);
 
 				// 检查是否包含起始点（容差30px）
-				boolean containsStart = r.x <= examStartX + 30 && r.x + r.w >= examStartX - 30
-				                        && r.y <= examStartY + 30 && r.y + r.h >= examStartY - 30;
+				boolean containsStart = r.x() <= examStartX + 30 && r.x() + r.w() >= examStartX - 30
+				                        && r.y() <= examStartY + 30 && r.y() + r.h() >= examStartY - 30;
 
 				// 检查是否覆盖大部分区域（至少50%）
-				int overlapX = Math.min(r.x + r.w, examEndX) - Math.max(r.x, examStartX);
-				int overlapY = Math.min(r.y + r.h, examEndY) - Math.max(r.y, examStartY);
+				int overlapX = Math.min(r.x() + r.w(), examEndX) - Math.max(r.x(), examStartX);
+				int overlapY = Math.min(r.y() + r.h(), examEndY) - Math.max(r.y(), examStartY);
 				double coverageX = (double) overlapX / (examEndX - examStartX);
 				double coverageY = (double) overlapY / (examEndY - examStartY);
 				double coverage = coverageX * coverageY;
 
-				if (containsStart && coverage > 0.3 && r.w * r.h > bestScore) {
-					bestScore = r.w * r.h;
+				if (containsStart && coverage > 0.3 && r.w() * r.h() > bestScore) {
+					bestScore = r.w() * r.h();
 					matchedExamRect = r;
 				}
 			}
 
 			if (matchedExamRect != null) {
-				examRegionRect = new DetectedBox(matchedExamRect.x, matchedExamRect.y, matchedExamRect.w, matchedExamRect.h);
+				examRegionRect = new DetectedBox(matchedExamRect.x(), matchedExamRect.y(), matchedExamRect.w(), matchedExamRect.h());
 				logger.info("✅ 准考证号区域: x=" + examRegionRect.x() + ", y=" + examRegionRect.y()
 				            + ", w=" + examRegionRect.w() + ", h=" + examRegionRect.h());
 			} else {
@@ -848,33 +839,33 @@ public class TemplateLayoutDetector {
 
 			for (DetectedBox r : largeRects) {
 				if (examRegionRect != null
-				    && r.x == examRegionRect.x()
-				    && r.y == examRegionRect.y()
-				    && r.w == examRegionRect.w()
-				    && r.h == examRegionRect.h()) {
+				    && r.x() == examRegionRect.x()
+				    && r.y() == examRegionRect.y()
+				    && r.w() == examRegionRect.w()
+				    && r.h() == examRegionRect.h()) {
 					continue;
 				}
 
 				boolean containsFirstChoice =
-						r.x <= firstChoiceX + 30 && r.x + r.w >= firstChoiceX - 30
-						&& r.y <= firstChoiceY + 30 && r.y + r.h >= firstChoiceY - 30;
+						r.x() <= firstChoiceX + 30 && r.x() + r.w() >= firstChoiceX - 30
+						&& r.y() <= firstChoiceY + 30 && r.y() + r.h() >= firstChoiceY - 30;
 
 				// examVGap 现在是中心距；最后一个数字框 top-left = startY + 9 * examVGap
 				int examBottomY = examStartY + 9 * examVGap + examBubbleH;
-				boolean belowExam = r.y > examBottomY - 80;
+				boolean belowExam = r.y() > examBottomY - 80;
 
-				if (containsFirstChoice && belowExam && r.w * r.h > bestScore) {
-					bestScore = r.w * r.h;
+				if (containsFirstChoice && belowExam && r.w() * r.h() > bestScore) {
+					bestScore = r.w() * r.h();
 					matchedChoiceRect = r;
 				}
 			}
 
 			if (matchedChoiceRect != null) {
 				choiceRegionRect = new Rect(
-						matchedChoiceRect.x,
-						matchedChoiceRect.y,
-						matchedChoiceRect.w,
-						matchedChoiceRect.h
+						matchedChoiceRect.x(),
+						matchedChoiceRect.y(),
+						matchedChoiceRect.w(),
+						matchedChoiceRect.h()
 				);
 				logger.info("✅ 选择题区域: x=" + choiceRegionRect.x()
 				            + ", y=" + choiceRegionRect.y()
@@ -882,10 +873,10 @@ public class TemplateLayoutDetector {
 				            + ", h=" + choiceRegionRect.height());
 				DetectedBox matchedFillRect = TemplateLayoutDetectorUtils.findFillBlankRegion(largeRects, matchedChoiceRect);
 				if (matchedFillRect != null) {
-					fillStartX = matchedFillRect.x;
-					fillStartY = matchedFillRect.y;
-					fillBoxW = matchedFillRect.w;
-					fillBoxH = matchedFillRect.h;
+					fillStartX = matchedFillRect.x();
+					fillStartY = matchedFillRect.y();
+					fillBoxW = matchedFillRect.w();
+					fillBoxH = matchedFillRect.h();
 					fillBlankCount = 1;
 				}
 				trimAndNormalizeChoiceLayout(choiceRegionRect);

@@ -21,6 +21,7 @@ import swing.qr.kiarelemb.task.QRTaskWorker;
 import swing.qr.kiarelemb.theme.QRColorsAndFonts;
 import swing.qr.kiarelemb.utils.PicturePanel;
 import swing.qr.kiarelemb.window.enhance.QROpinionDialog;
+import swing.qr.kiarelemb.window.enhance.QRSmallTipShow;
 import swing.qr.kiarelemb.window.utils.QRValueInputDialog;
 
 import javax.imageio.ImageIO;
@@ -132,12 +133,7 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 		QRPanel inputPanel = new QRPanel(false, new FlowLayout(FlowLayout.LEFT, 8, 0));
 		inputPanel.add(new QRLabel("得分"));
 		scoreField.setPreferredSize(new Dimension(120, 32));
-		scoreField.addKeyListenerAction(QRKeyListener.TYPE.TYPE, e -> {
-			if (e.getKeyCode() == KeyEvent.VK_ENTER) {
-				next(null);
-				e.consume();
-			}
-		});
+		scoreField.addKeyListenerAction(QRKeyListener.TYPE.PRESS, e -> next(null), KeyEvent.VK_ENTER);
 		inputPanel.add(scoreField);
 		panel.add(inputPanel, BorderLayout.CENTER);
 		return panel;
@@ -325,6 +321,11 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 		if (!saveCurrent()) {
 			return;
 		}
+		if (scoreField.getText().isBlank()) {
+			QRSmallTipShow.display(MainWindow.INSTANCE, "请填写分数。");
+			return;
+		}
+
 		if (isCtrlDown(event)) {
 			if (ManualScoringPanel.allManualScoresSaved(project, template)) {
 				project.setManualReviewIndex(index);

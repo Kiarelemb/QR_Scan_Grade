@@ -3,15 +3,9 @@ package sg.qr.kiarelemb.menu.data;
 import method.qr.kiarelemb.utils.QRFileUtils;
 import sg.qr.kiarelemb.MainWindow;
 import sg.qr.kiarelemb.menu.MenuItem;
-import swing.qr.kiarelemb.basic.QRPanel;
-import swing.qr.kiarelemb.basic.QRRoundButton;
-import swing.qr.kiarelemb.basic.QRTextPane;
-import swing.qr.kiarelemb.theme.QRColorsAndFonts;
-import swing.qr.kiarelemb.window.basic.QRDialog;
 import swing.qr.kiarelemb.window.enhance.QROpinionDialog;
+import swing.qr.kiarelemb.window.utils.QRTextInputDialog;
 
-import javax.swing.border.LineBorder;
-import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.io.File;
 import java.math.BigDecimal;
@@ -50,42 +44,20 @@ public class EnglishScoreInput extends MenuItem {
 		return scores;
 	}
 
-	private static final class EnglishScoreDialog extends QRDialog {
-		private final QRTextPane textPane = new QRTextPane();
+	private static final class EnglishScoreDialog extends QRTextInputDialog {
 
 		private EnglishScoreDialog() {
-			super(MainWindow.INSTANCE);
-			setTitle("导入入班英语成绩");
-			setTitlePlace(CENTER);
-			setSize(560, 520);
-			setLocationRelativeTo(MainWindow.INSTANCE);
-			setParentWindowNotFollowMove();
+			super(MainWindow.INSTANCE, "导入入班英语成绩", 560, 520);
+		}
 
-			mainPanel.setLayout(new BorderLayout(5, 5));
-			QRPanel center = new QRPanel(false, new BorderLayout());
-			center.setBorder(new LineBorder(QRColorsAndFonts.LINE_COLOR, 3));
-			textPane.addUndoManager();
+		@Override
+		protected String initialText() {
 			String text = readFileText();
-
 			if (text.isBlank()) {
 				text = "张三\t90.0" + System.lineSeparator()
-					   + "李四\t80.0" + System.lineSeparator();
+				       + "李四\t80.0" + System.lineSeparator();
 			}
-			textPane.setText(text);
-			center.add(textPane.addScrollPane(), BorderLayout.CENTER);
-			mainPanel.add(center, BorderLayout.CENTER);
-
-			QRPanel bottom = new QRPanel(false, new FlowLayout(FlowLayout.RIGHT, 8, 0));
-			bottom.setBorder(new LineBorder(QRColorsAndFonts.FRAME_COLOR_BACK, 10));
-			QRRoundButton cancelButton = new QRRoundButton("取消");
-			cancelButton.setPreferredSize(new Dimension(80, 30));
-			cancelButton.addClickAction(event -> dispose());
-			QRRoundButton saveButton = new QRRoundButton("保存");
-			saveButton.setPreferredSize(new Dimension(80, 30));
-			saveButton.addClickAction(this::save);
-			bottom.add(cancelButton);
-			bottom.add(saveButton);
-			mainPanel.add(bottom, BorderLayout.SOUTH);
+			return text;
 		}
 
 		private String readFileText() {
@@ -95,7 +67,8 @@ public class EnglishScoreInput extends MenuItem {
 			return QRFileUtils.fileReaderWithUtf8All(ENGLISH_SCORE_FILE);
 		}
 
-		private void save(ActionEvent event) {
+		@Override
+		protected void onSave() {
 			String normalized = normalize(textPane.getText());
 			if (normalized == null) {
 				return;

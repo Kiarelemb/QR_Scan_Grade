@@ -16,10 +16,10 @@ import java.util.List;
  */
 public class TemplateLayoutDetectorUtils {
 	static boolean isBubbleCandidate(DetectedBox r) {
-		if (r.w > 90 || r.h > 90) return false;
-		int boxArea = r.w * r.h;
+		if (r.w() > 90 || r.h() > 90) return false;
+		int boxArea = r.w() * r.h();
 		if (boxArea < 80 || boxArea > 20000) return false;
-		double aspect = (double) r.w / r.h;
+		double aspect = (double) r.w() / r.h();
 		return aspect >= 0.35 && aspect <= 3.2;
 	}
 
@@ -37,18 +37,18 @@ public class TemplateLayoutDetectorUtils {
 	static DetectedBox findFillBlankRegion(List<DetectedBox> largeRects, DetectedBox choiceRect) {
 		DetectedBox matchedFillRect = null;
 		int bestScore = -1;
-		int choiceBottom = choiceRect.y + choiceRect.h;
-		int choiceRight = choiceRect.x + choiceRect.w;
+		int choiceBottom = choiceRect.y() + choiceRect.h();
+		int choiceRight = choiceRect.x() + choiceRect.w();
 
 		for (DetectedBox r : largeRects) {
-			if (r.x == choiceRect.x && r.y == choiceRect.y && r.w == choiceRect.w && r.h == choiceRect.h) {
+			if (r.x() == choiceRect.x() && r.y() == choiceRect.y() && r.w() == choiceRect.w() && r.h() == choiceRect.h()) {
 				continue;
 			}
-			boolean belowChoice = r.y >= choiceBottom + 40;
-			boolean similarColumn = Math.abs(r.x - choiceRect.x) <= 120
-									&& Math.abs((r.x + r.w) - choiceRight) <= 160;
-			if (belowChoice && similarColumn && r.w * r.h > bestScore) {
-				bestScore = r.w * r.h;
+			boolean belowChoice = r.y() >= choiceBottom + 40;
+			boolean similarColumn = Math.abs(r.x() - choiceRect.x()) <= 120
+			                        && Math.abs((r.x() + r.w()) - choiceRight) <= 160;
+			if (belowChoice && similarColumn && r.w() * r.h() > bestScore) {
+				bestScore = r.w() * r.h();
 				matchedFillRect = r;
 			}
 		}

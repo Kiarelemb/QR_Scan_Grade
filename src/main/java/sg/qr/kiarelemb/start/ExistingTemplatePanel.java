@@ -401,10 +401,10 @@ public class ExistingTemplatePanel extends QRPanel {
 		new NewGradingProjectDialog(selectedItem.template, selectedItem.file, answerDirectory).setVisible(true);
 	}
 
-	static final record TemplateLoadResult(List<LoadedTemplate> templates, List<String> failures) {
+	record TemplateLoadResult(List<LoadedTemplate> templates, List<String> failures) {
 	}
 
-	static final record LoadedTemplate(File file, SheetTemplate template) {
+	record LoadedTemplate(File file, SheetTemplate template) {
 	}
 
 	private final class TemplateItem {

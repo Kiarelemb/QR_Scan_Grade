@@ -9,11 +9,7 @@ import sg.qr.kiarelemb.exam.processing.BubbleMarkReader;
 import sg.qr.kiarelemb.exam.processing.ObjectiveAnswerGrader;
 import sg.qr.kiarelemb.exam.processing.SheetTemplateFileStore;
 import swing.qr.kiarelemb.QRSwing;
-import swing.qr.kiarelemb.basic.QRLabel;
-import swing.qr.kiarelemb.basic.QRPanel;
-import swing.qr.kiarelemb.basic.QRRoundButton;
-import swing.qr.kiarelemb.basic.QRTable;
-import swing.qr.kiarelemb.basic.QRTextField;
+import swing.qr.kiarelemb.basic.*;
 import swing.qr.kiarelemb.task.QRTaskOptions;
 import swing.qr.kiarelemb.task.QRTaskRunner;
 import swing.qr.kiarelemb.task.QRTaskWorker;
@@ -260,7 +256,7 @@ public class ObjectiveReviewPanel extends QRPanel {
 			project.setIndex(project.answerFiles().size());
 			project.write();
 			removeShortcuts();
-			MainWindow.INSTANCE.showAfterChoiceReview(project);
+			MainWindow.INSTANCE.showAfterChoiceReviewFromChoice(project);
 			return;
 		}
 
@@ -520,7 +516,7 @@ public class ObjectiveReviewPanel extends QRPanel {
 				project.setIndex(project.answerFiles().size());
 				project.write();
 				removeShortcuts();
-				MainWindow.INSTANCE.showAfterChoiceReview(project);
+				MainWindow.INSTANCE.showAfterChoiceReviewFromChoice(project);
 			} else {
 				QROpinionDialog.messageTellShow(MainWindow.INSTANCE, "还有答卷未完成选择题校对，不能直接进入后续。");
 			}
@@ -530,7 +526,7 @@ public class ObjectiveReviewPanel extends QRPanel {
 			project.setIndex(project.answerFiles().size());
 			project.write();
 			removeShortcuts();
-			MainWindow.INSTANCE.showAfterChoiceReview(project);
+			MainWindow.INSTANCE.showAfterChoiceReviewFromChoice(project);
 			return;
 		}
 		project.setIndex(Math.min(project.index() + 1, project.answerFiles().size()));

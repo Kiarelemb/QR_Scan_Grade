@@ -1,7 +1,6 @@
 package sg.qr.kiarelemb.exam.processing;
-import method.qr.kiarelemb.utils.QRLoggerUtils;
-import java.util.logging.Logger;
 
+import method.qr.kiarelemb.utils.QRLoggerUtils;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.ImageType;
@@ -16,6 +15,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.BiConsumer;
+import java.util.logging.Logger;
 
 public final class DocumentPageLoader {
 	private static final Logger logger = QRLoggerUtils.getLogger(DocumentPageLoader.class);

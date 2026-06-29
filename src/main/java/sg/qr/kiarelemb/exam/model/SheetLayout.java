@@ -1,14 +1,17 @@
 package sg.qr.kiarelemb.exam.model;
+
 import method.qr.kiarelemb.utils.QRLoggerUtils;
-import java.util.logging.Logger;
+
 import java.util.*;
+import java.util.logging.Logger;
+
 /**
  * @author Kiarelemb
  * @projectName QR_ScanGrade
  * @className SheetLayout
  * @description TODO
  * @create 2026/5/31 14:10
- *
+ * <p>
  * 答题卡布局模型：描述一张答题卡上所有题目的位置和正确答案。
  * <p>
  * 布局可通过两种方式构建：
@@ -32,28 +35,42 @@ public class SheetLayout {
 	private final int imageWidth;
 	private final int imageHeight;
 
-	/** 准考证号位数 */
+	/**
+	 * 准考证号位数
+	 */
 	private final int examIdDigits;
-	/** 准考证号每位数字的选项标签（0-9） */
-	public static final String[] DIGIT_LABELS = {"0","1","2","3","4","5","6","7","8","9"};
+	/**
+	 * 准考证号每位数字的选项标签（0-9）
+	 */
+	public static final String[] DIGIT_LABELS = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"};
 
-	/** 选择题每题选项标签 */
-	public static final String[] CHOICE_LABELS = {"A","B","C","D"};
+	/**
+	 * 选择题每题选项标签
+	 */
+	public static final String[] CHOICE_LABELS = {"A", "B", "C", "D"};
 
-	/** 所有题目（按题号排序） */
+	/**
+	 * 所有题目（按题号排序）
+	 */
 	private final List<SheetQuestion> questions;
 
-	/** 准考证号题目单独索引（方便快速访问） */
+	/**
+	 * 准考证号题目单独索引（方便快速访问）
+	 */
 	private final List<SheetQuestion> examIdQuestions;
 
-	/** 选择题索引 */
+	/**
+	 * 选择题索引
+	 */
 	private final List<SheetQuestion> choiceQuestions;
 
-	/** 填空题索引 */
+	/**
+	 * 填空题索引
+	 */
 	private final List<SheetQuestion> fillBlankQuestions;
 
 	public SheetLayout(String name, int imageWidth, int imageHeight,
-					   int examIdDigits, List<SheetQuestion> questions) {
+	                   int examIdDigits, List<SheetQuestion> questions) {
 		this.name = name;
 		this.imageWidth = imageWidth;
 		this.imageHeight = imageHeight;
@@ -90,16 +107,42 @@ public class SheetLayout {
 				.orElse(Integer.MAX_VALUE);
 	}
 
-	public String getName() { return name; }
-	public int getImageWidth() { return imageWidth; }
-	public int getImageHeight() { return imageHeight; }
-	public int getExamIdDigits() { return examIdDigits; }
-	public List<SheetQuestion> getQuestions() { return Collections.unmodifiableList(questions); }
-	public List<SheetQuestion> getExamIdQuestions() { return Collections.unmodifiableList(examIdQuestions); }
-	public List<SheetQuestion> getChoiceQuestions() { return Collections.unmodifiableList(choiceQuestions); }
-	public List<SheetQuestion> getFillBlankQuestions() { return Collections.unmodifiableList(fillBlankQuestions); }
+	public String getName() {
+		return name;
+	}
 
-	public String[] getDigitLabels() { return DIGIT_LABELS; }
+	public int getImageWidth() {
+		return imageWidth;
+	}
+
+	public int getImageHeight() {
+		return imageHeight;
+	}
+
+	public int getExamIdDigits() {
+		return examIdDigits;
+	}
+
+	public List<SheetQuestion> getQuestions() {
+		return Collections.unmodifiableList(questions);
+	}
+
+	public List<SheetQuestion> getExamIdQuestions() {
+		return Collections.unmodifiableList(examIdQuestions);
+	}
+
+	public List<SheetQuestion> getChoiceQuestions() {
+		return Collections.unmodifiableList(choiceQuestions);
+	}
+
+	public List<SheetQuestion> getFillBlankQuestions() {
+		return Collections.unmodifiableList(fillBlankQuestions);
+	}
+
+	public String[] getDigitLabels() {
+		return DIGIT_LABELS;
+	}
+
 	public String[] getChoiceLabels() {
 		int optionCount = choiceQuestions.stream()
 				.map(SheetQuestion::optionRegions)

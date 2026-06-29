@@ -1,7 +1,7 @@
 package sg.qr.kiarelemb.component;
 
-import swing.qr.kiarelemb.utils.QRLineSeparatorLabel;
 import swing.qr.kiarelemb.theme.QRColorsAndFonts;
+import swing.qr.kiarelemb.utils.QRLineSeparatorLabel;
 
 /**
  * @author Kiarelemb
@@ -11,7 +11,7 @@ import swing.qr.kiarelemb.theme.QRColorsAndFonts;
  * @create 2024/6/30 上午10:36
  */
 public class LineSeparatorLabel extends QRLineSeparatorLabel {
-    public LineSeparatorLabel() {
-        super(QRColorsAndFonts.LINE_COLOR, 0.6d);
-    }
+	public LineSeparatorLabel() {
+		super(QRColorsAndFonts.LINE_COLOR, 0.6d);
+	}
 }

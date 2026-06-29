@@ -1,5 +1,8 @@
 package sg.qr.kiarelemb.exam.model;
-import java.util.*;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * @author Kiarelemb
@@ -9,11 +12,11 @@ import java.util.*;
  * @create 2026/5/31 14:10
  */
 public record GradingOutcome(String examineeId, String sheetName, List<QuestionResult> questionResults, int totalScore,
-							  int earnedScore) {
+                             int earnedScore) {
 
 	public GradingOutcome(String examineeId, String sheetName,
-						  List<QuestionResult> questionResults,
-						  int totalScore, int earnedScore) {
+	                      List<QuestionResult> questionResults,
+	                      int totalScore, int earnedScore) {
 		this.examineeId = examineeId;
 		this.sheetName = sheetName;
 		this.questionResults = new ArrayList<>(questionResults);
@@ -33,7 +36,7 @@ public record GradingOutcome(String examineeId, String sheetName, List<QuestionR
 	 *
 	 * @param uncertain 存疑（如填涂模糊，需人工复核）
 	 */
-		public record QuestionResult(int questionNumber, SheetQuestion.QuestionType type, String expectedAnswer,
-									 String detectedAnswer, boolean correct, boolean uncertain) {
+	public record QuestionResult(int questionNumber, SheetQuestion.QuestionType type, String expectedAnswer,
+	                             String detectedAnswer, boolean correct, boolean uncertain) {
 	}
 }

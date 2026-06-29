@@ -1,13 +1,17 @@
 package sg.qr.kiarelemb.exam.processing;
+
 import method.qr.kiarelemb.utils.QRLoggerUtils;
-import java.util.logging.Logger;
 import org.bytedeco.opencv.opencv_core.Mat;
 import org.bytedeco.opencv.opencv_core.Rect;
-import sg.qr.kiarelemb.exam.model.SheetLayout;
 import sg.qr.kiarelemb.exam.model.GradingOutcome;
+import sg.qr.kiarelemb.exam.model.SheetLayout;
 import sg.qr.kiarelemb.exam.model.SheetQuestion;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.logging.Logger;
 
 /**
  * @author Kiarelemb
@@ -103,7 +107,6 @@ public class ObjectiveAnswerGrader {
 	}
 
 
-
 	/**
 	 * 在一组选项中找出填涂比例最高的那个。
 	 * 若所有选项都低于阈值，返回 null（未填涂）。
@@ -126,7 +129,6 @@ public class ObjectiveAnswerGrader {
 		}
 		return bestIndex < labels.length ? labels[bestIndex] : "?";
 	}
-
 
 
 	/**

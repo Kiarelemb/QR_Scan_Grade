@@ -1,16 +1,11 @@
 package sg.qr.kiarelemb.test;
 
-import sg.qr.kiarelemb.exam.template.detect.TemplateLayoutDetector;
 import sg.qr.kiarelemb.exam.model.SheetLayout;
 import sg.qr.kiarelemb.exam.processing.DocumentPageLoader;
+import sg.qr.kiarelemb.exam.template.detect.TemplateLayoutDetector;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public final class TemplateDetectionDebug {
 	private TemplateDetectionDebug() {
@@ -46,9 +41,9 @@ public final class TemplateDetectionDebug {
 		Map<Integer, List<Integer>> rows = new LinkedHashMap<>();
 		for (var rect : detector.allRects) {
 			boolean inChoiceRegion = rect.cx >= detector.choiceRegionRect.x()
-					&& rect.cx <= detector.choiceRegionRect.x() + detector.choiceRegionRect.width()
-					&& rect.cy >= detector.choiceRegionRect.y()
-					&& rect.cy <= detector.choiceRegionRect.y() + detector.choiceRegionRect.height();
+			                         && rect.cx <= detector.choiceRegionRect.x() + detector.choiceRegionRect.width()
+			                         && rect.cy >= detector.choiceRegionRect.y()
+			                         && rect.cy <= detector.choiceRegionRect.y() + detector.choiceRegionRect.height();
 			if (!inChoiceRegion || rect.w > 90 || rect.h > 90 || rect.w * rect.h < 80) {
 				continue;
 			}

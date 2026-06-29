@@ -141,6 +141,7 @@ public class Keys {
 	 * 菜单快捷键之设置，默认为 {@code Ctrl Z}
 	 */
 	public static final String QUICK_KEY_SETTING_WINDOW = "quick.key.menu.type.setting";
+	public static final String QUICK_KEY_PREVIOUS_STEP = "quick.key.menu.previous.step";
 	/**
 	 * 当量窗体显示快捷键，默认为 {@code Ctrl D}
 	 */
@@ -170,6 +171,7 @@ public class Keys {
 			putIfAbsent(DEEPSEEK_CONCURRENCY, "4");
 			putIfAbsent(OCR_PROVIDER, "baidu");
 			putIfAbsent(BAIDU_OCR_API_KEY, "");
+			putIfAbsent(QUICK_KEY_PREVIOUS_STEP, "alt + left");
 			putIfAbsent(BAIDU_OCR_SECRET_KEY, "");
 			putIfAbsent(GOOGLE_OCR_API_KEY, "");
 			put(TYPE_WORD_TOTAL_LAST_UPDATE, QRTimeUtils.getDateNow());

@@ -1,7 +1,7 @@
 package sg.qr.kiarelemb.component;
 
-import sg.qr.kiarelemb.menu.type.SettingsItem;
 import sg.qr.kiarelemb.data.Keys;
+import sg.qr.kiarelemb.menu.type.SettingsItem;
 import swing.qr.kiarelemb.basic.QRLabel;
 
 /**

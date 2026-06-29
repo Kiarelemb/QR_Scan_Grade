@@ -63,6 +63,7 @@ public final class SheetCalibrator {
 					transform.transform(template.examRegionRect()),
 					transform.transform(template.choiceRegionRect()),
 					transform.transform(template.fillBlankRegionRect()),
+					transform,
 					true);
 		} catch (Exception ex) {
 			logger.warning("答卷校准异常，使用模板原始坐标：" + ex.getMessage());
@@ -454,13 +455,23 @@ public final class SheetCalibrator {
 	}
 
 	public record CalibrationResult(SheetLayout answerSheet, Rect examRegionRect, Rect choiceRegionRect,
-									Rect fillBlankRegionRect, boolean calibrated) {
+									Rect fillBlankRegionRect, CoordinateTransform transform, boolean calibrated) {
+		public Rect transform(Rect rect) {
+			if (rect == null || transform == null) {
+				return copy(rect);
+			}
+			int width = answerSheet == null ? Integer.MAX_VALUE : answerSheet.getImageWidth();
+			int height = answerSheet == null ? Integer.MAX_VALUE : answerSheet.getImageHeight();
+			return BinaryRegionAnalyzer.clamp(transform.transform(rect), width, height);
+		}
+
 		private static CalibrationResult uncalibrated(SheetLayout source, SheetTemplate template) {
 			return new CalibrationResult(
 					source,
 					template == null ? null : copy(template.examRegionRect()),
 					template == null ? null : copy(template.choiceRegionRect()),
 					template == null ? null : copy(template.fillBlankRegionRect()),
+					null,
 					false);
 		}
 	}

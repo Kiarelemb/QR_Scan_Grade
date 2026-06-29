@@ -37,11 +37,10 @@ public class Enter {
 		QRSwing.windowIcon = new ImageIcon(Info.ICON_PNG_PATH);
 		QRSwing.setWindowTitleMenu(true);
 
-		QRProgressDialog loadDialog = new QRProgressDialog(null, false);
-		loadDialog.setIndeterminate(true);
-		loadDialog.setCancelButtonVisible(false);
-		loadDialog.setProgressDescription("");
-//		loadDialog.setProgressDescription("正在加载");
+		QRProgressDialog loadDialog = new QRProgressDialog(null, false)
+				.setIndeterminate(true)
+				.setCancelButtonVisible(false)
+				.setProgressDescription("");
 		QRTaskRunner.run(context -> {
 			loadDialog.setVisible(true);
 			return "完成";
@@ -90,10 +89,6 @@ public class Enter {
 		QRSwing.registerGlobalKeyEvents();
 
 		QRSwing.registerGlobalEventWindow(MainWindow.INSTANCE);
-
-		//提前加载一遍试试
-		//SettingWindow.INSTANCE.setVisible(false);
-//		logger.config("设置窗口预加载完毕。");
 
 	}
 }

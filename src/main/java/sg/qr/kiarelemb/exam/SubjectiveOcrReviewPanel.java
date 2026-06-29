@@ -474,7 +474,7 @@ public final class SubjectiveOcrReviewPanel extends QRPanel implements ProjectSt
 		saveCurrent();
 		if (isCtrlDown(event)) {
 			if (project.allSubjectiveAnswersSaved()) {
-				MainWindow.INSTANCE.showAfterChoiceReview(project);
+				MainWindow.INSTANCE.showAfterChoiceReviewFromSubjective(project);
 			} else {
 				QROpinionDialog.messageTellShow(MainWindow.INSTANCE, "还有答卷未完成填空题校对，不能直接进入后续。");
 			}
@@ -511,7 +511,7 @@ public final class SubjectiveOcrReviewPanel extends QRPanel implements ProjectSt
 	private void finish() {
 		saveCurrent();
 		QRSwing.registerGlobalActionRemove(QRStringUtils.getKeyStroke("ctrl + Enter"), true);
-		MainWindow.INSTANCE.showAfterChoiceReview(project);
+		MainWindow.INSTANCE.showAfterChoiceReviewFromSubjective(project);
 	}
 
 	private void recognizeWithOcr() {

@@ -1,7 +1,11 @@
 package sg.qr.kiarelemb.start;
 
 import sg.qr.kiarelemb.MainWindow;
+import sg.qr.kiarelemb.exam.ManualScoringPanel;
+import sg.qr.kiarelemb.exam.SubjectiveOcrReviewPanel;
 import sg.qr.kiarelemb.exam.model.GradingProject;
+import sg.qr.kiarelemb.exam.model.SheetTemplate;
+import sg.qr.kiarelemb.exam.processing.SheetTemplateFileStore;
 import swing.qr.kiarelemb.basic.QRList;
 import swing.qr.kiarelemb.basic.QRPanel;
 import swing.qr.kiarelemb.basic.QRRoundButton;
@@ -16,8 +20,10 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.WindowEvent;
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.List;
 
 /**
  * @author Kiarelemb
@@ -134,8 +140,30 @@ public class ContinueProjectWindow extends QRDialog {
 
 		private String progressText() {
 			int total = project.answerFiles() == null ? 0 : project.answerFiles().size();
-			int index = Math.max(0, Math.min(project.index(), total));
-			return "进度：" + index + " / " + total;
+			List<String> parts = new ArrayList<>();
+			parts.add("选择题：" + progress(project.index(), total));
+			try {
+				SheetTemplate template = SheetTemplateFileStore.load(new File(project.templateFilePath()));
+				if (SubjectiveOcrReviewPanel.hasSubjectiveQuestions(project, template)) {
+					parts.add("填空校对：" + progress(project.savedSubjectiveAnswerCount(), total));
+				}
+				if (ManualScoringPanel.hasManualQuestions(project, template)) {
+					int manualTotal = ManualScoringPanel.manualReviewItemCount(project, template);
+					int savedManualCount = project.savedManualScoreCount();
+					if (manualTotal <= 0 && savedManualCount > 0) {
+						manualTotal = savedManualCount;
+					}
+					parts.add("人工判分：" + progress(savedManualCount, manualTotal));
+				}
+			} catch (Exception ignored) {
+			}
+			return String.join("；", parts);
+		}
+
+		private String progress(int value, int total) {
+			int safeTotal = Math.max(0, total);
+			int safeValue = Math.max(0, safeTotal == 0 ? value : Math.min(value, safeTotal));
+			return safeValue + " / " + safeTotal;
 		}
 	}
 }

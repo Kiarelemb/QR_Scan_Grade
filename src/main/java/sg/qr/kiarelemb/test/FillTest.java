@@ -3,10 +3,7 @@ package sg.qr.kiarelemb.test;
 import org.bytedeco.opencv.opencv_core.Rect;
 
 import javax.imageio.ImageIO;
-import java.awt.BasicStroke;
-import java.awt.Color;
-import java.awt.Font;
-import java.awt.Graphics2D;
+import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.InputStream;
@@ -89,9 +86,9 @@ public class FillTest {
 
 	private static String fetchAccessToken(String apiKey, String secretKey) throws Exception {
 		String url = "https://aip.baidubce.com/oauth/2.0/token"
-					 + "?grant_type=client_credentials"
-					 + "&client_id=" + urlEncode(apiKey)
-					 + "&client_secret=" + urlEncode(secretKey);
+		             + "?grant_type=client_credentials"
+		             + "&client_id=" + urlEncode(apiKey)
+		             + "&client_secret=" + urlEncode(secretKey);
 		String response = request(url, "GET", null);
 		String token = jsonString(response, "access_token", 0);
 		if (token.isBlank()) {
@@ -103,13 +100,13 @@ public class FillTest {
 	private static String handwriting(String accessToken, File imageFile) throws Exception {
 		String imageBase64 = Base64.getEncoder().encodeToString(Files.readAllBytes(imageFile.toPath()));
 		String body = "image=" + urlEncode(imageBase64)
-					  + "&language_type=JAP"
-					  + "&detect_direction=true"
-					  + "&probability=true"
-					  + "&recognize_granularity=big"
-					  + "&eng_granularity=word";
+		              + "&language_type=JAP"
+		              + "&detect_direction=true"
+		              + "&probability=true"
+		              + "&recognize_granularity=big"
+		              + "&eng_granularity=word";
 		String url = "https://aip.baidubce.com/rest/2.0/ocr/v1/handwriting?access_token="
-					 + urlEncode(accessToken);
+		             + urlEncode(accessToken);
 		return request(url, "POST", body);
 	}
 

@@ -1,9 +1,9 @@
 package sg.qr.kiarelemb.data;
 
 import org.bytedeco.opencv.opencv_core.Mat;
-import sg.qr.kiarelemb.exam.results.ScoringPlan;
-import sg.qr.kiarelemb.exam.results.ScoreOutcome;
 import sg.qr.kiarelemb.exam.model.GradingProject;
+import sg.qr.kiarelemb.exam.results.ScoreOutcome;
+import sg.qr.kiarelemb.exam.results.ScoringPlan;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;

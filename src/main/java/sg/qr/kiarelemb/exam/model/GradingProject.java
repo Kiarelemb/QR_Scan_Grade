@@ -1,15 +1,13 @@
 package sg.qr.kiarelemb.exam.model;
-import method.qr.kiarelemb.utils.QRLoggerUtils;
-import java.util.logging.Logger;
 
 import method.qr.kiarelemb.utils.QRFileUtils;
+import method.qr.kiarelemb.utils.QRLoggerUtils;
 import method.qr.kiarelemb.utils.QRPropertiesUtils;
-import method.qr.kiarelemb.utils.QRTimeCountUtil;
 import sg.qr.kiarelemb.exam.processing.DocumentPageLoader;
-import swing.qr.kiarelemb.utils.QRComponentUtils;
 
 import java.io.File;
 import java.util.*;
+import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -89,7 +87,7 @@ public final class GradingProject {
 	}
 
 	public GradingProject(String projectFilePath, String templateFilePath, String answerDirectoryPath, String[] standardAnswers,
-						  List<File> answerFiles, Map<String, File> answerBackFilesByFrontName) {
+	                      List<File> answerFiles, Map<String, File> answerBackFilesByFrontName) {
 		this(projectFilePath, templateFilePath, answerDirectoryPath, standardAnswers, answerFiles);
 		this.answerBackFilesByFrontName = answerBackFilesByFrontName == null ? new LinkedHashMap<>() : new LinkedHashMap<>(answerBackFilesByFrontName);
 	}
@@ -362,7 +360,7 @@ public final class GradingProject {
 			return false;
 		}
 		this.answerFiles = scannedFiles;
-			logger.info("刷新答卷: " + scannedFiles.size() + " 份");
+		logger.info("刷新答卷: " + scannedFiles.size() + " 份");
 		if (index > scannedFiles.size()) {
 			index = scannedFiles.size();
 		}
@@ -605,6 +603,20 @@ public final class GradingProject {
 		return true;
 	}
 
+	public int savedSubjectiveAnswerCount() {
+		if (this.answerFiles == null || this.answerFiles.isEmpty()) {
+			return 0;
+		}
+		int count = 0;
+		for (File answerFile : this.answerFiles) {
+			String answers = answerFile == null ? "" : this.subjectiveAnswersByFile.get(answerFile.getName());
+			if (answers != null && !answers.isBlank()) {
+				count++;
+			}
+		}
+		return count;
+	}
+
 	private static List<String> subjectiveAnswerTokens(String text) {
 		if (text == null || text.isBlank()) {
 			return List.of();
@@ -693,6 +705,10 @@ public final class GradingProject {
 			copy.put(entry.getKey(), Collections.unmodifiableMap(entry.getValue()));
 		}
 		return Collections.unmodifiableMap(copy);
+	}
+
+	public int savedManualScoreCount() {
+		return this.manualScoresByExamId.values().stream().mapToInt(Map::size).sum();
 	}
 
 	public void putManualScore(String examineeId, String sectionName, String score) {

@@ -4,19 +4,19 @@
 
 package sg.qr.kiarelemb.test;
 
-import java.awt.*;
 import javax.swing.*;
+import java.awt.*;
 
 /**
  * @author Kiare
  */
 public class FrameTest extends JFrame {
-    public FrameTest() {
-        initComponents();
-    }
+	public FrameTest() {
+		initComponents();
+	}
 
-    private void initComponents() {
-        // JFormDesigner - Component initialization - DO NOT MODIFY  //GEN-BEGIN:initComponents  @formatter:off
+	private void initComponents() {
+		// JFormDesigner - Component initialization - DO NOT MODIFY  //GEN-BEGIN:initComponents  @formatter:off
 
         //======== this ========
         var contentPane = getContentPane();
@@ -39,8 +39,8 @@ public class FrameTest extends JFrame {
         pack();
         setLocationRelativeTo(getOwner());
         // JFormDesigner - End of component initialization  //GEN-END:initComponents  @formatter:on
-    }
+	}
 
-    // JFormDesigner - Variables declaration - DO NOT MODIFY  //GEN-BEGIN:variables  @formatter:off
+	// JFormDesigner - Variables declaration - DO NOT MODIFY  //GEN-BEGIN:variables  @formatter:off
     // JFormDesigner - End of variables declaration  //GEN-END:variables  @formatter:on
 }

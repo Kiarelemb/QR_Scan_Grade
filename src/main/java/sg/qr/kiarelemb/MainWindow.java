@@ -2,7 +2,6 @@ package sg.qr.kiarelemb;
 
 import method.qr.kiarelemb.utils.QRLoggerUtils;
 import sg.qr.kiarelemb.component.SplitPane;
-import sg.qr.kiarelemb.data.Keys;
 import sg.qr.kiarelemb.exam.ManualScoringPanel;
 import sg.qr.kiarelemb.exam.ObjectiveReviewPanel;
 import sg.qr.kiarelemb.exam.ObjectiveReviewTextPane;
@@ -14,6 +13,7 @@ import sg.qr.kiarelemb.exam.processing.DocumentPageLoader;
 import sg.qr.kiarelemb.exam.processing.SheetTemplateFileStore;
 import sg.qr.kiarelemb.exam.results.ResultsPanel;
 import sg.qr.kiarelemb.menu.data.EnglishScoreInput;
+import sg.qr.kiarelemb.menu.jump.PreviousStepItem;
 import sg.qr.kiarelemb.menu.type.SettingsItem;
 import sg.qr.kiarelemb.res.Info;
 import sg.qr.kiarelemb.start.StartPanel;
@@ -25,7 +25,6 @@ import swing.qr.kiarelemb.window.basic.QRFrame;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.WindowEvent;
 import java.io.File;
 import java.io.IOException;
 import java.util.logging.Logger;
@@ -61,10 +60,12 @@ public class MainWindow extends QRFrame {
 	private void menuInit() {
 		this.titleMenuPanel.setAutoExpend(true);
 		QRButton typeMenu = this.titleMenuPanel.add("数据");
+		QRButton jumpMenu = this.titleMenuPanel.add("跳转");
 		QRButton aboutMenu = this.titleMenuPanel.add("关于");
 
 		typeMenu.add(SettingsItem.SETTINGS_ITEM);
 		typeMenu.add(EnglishScoreInput.ENGLISH_SCORE_INPUT);
+		jumpMenu.add(PreviousStepItem.PREVIOUS_STEP_ITEM);
 
 	}
 
@@ -157,12 +158,24 @@ public class MainWindow extends QRFrame {
 	}
 
 	public void showProjectReview(GradingProject project) {
+		PreviousStepItem.clear();
 		setCenterComponent(SplitPane.SPLIT_PANE);
 		SplitPane.SPLIT_PANE.showTopComponent(new ObjectiveReviewPanel(project));
 	}
 
 	public void showProjectEnd(GradingProject project) {
+		PreviousStepItem.clear();
 		setCenterComponent(new ResultsPanel(project));
+	}
+
+	public void showAfterChoiceReviewFromChoice(GradingProject project) {
+		PreviousStepItem.recordChoiceReview(project);
+		showAfterChoiceReview(project);
+	}
+
+	public void showAfterChoiceReviewFromSubjective(GradingProject project) {
+		PreviousStepItem.recordSubjectiveReview(project);
+		showAfterChoiceReview(project);
 	}
 
 	public void showAfterChoiceReview(GradingProject project) {
@@ -183,6 +196,7 @@ public class MainWindow extends QRFrame {
 	}
 
 	public void showStartPanel() {
+		PreviousStepItem.clear();
 		ObjectiveReviewTextPane.CHOICE_CHECK_TEXT_PANE.setReviewAnswerChangeListener(null);
 		ObjectiveReviewTextPane.CHOICE_CHECK_TEXT_PANE.clearReviewAnswers();
 		setCenterComponent(StartPanel.START_PANEL);
@@ -210,13 +224,8 @@ public class MainWindow extends QRFrame {
 			if (centerComponent instanceof ProjectStateSaver saver) {
 				saver.saveProjectState();
 			}
-			QRSwing.setGlobalSetting(Keys.WINDOW_SPLIT_WEIGHT, SplitPane.SPLIT_PANE.getDividerLocation());
 			logger.info("************************************** 您已退出程序 **************************************");
 		});
-	}
-
-	@Override
-	public void windowOpened(WindowEvent e) {
 	}
 
 	@Override
@@ -229,4 +238,5 @@ public class MainWindow extends QRFrame {
 		}
 		logger.info("全局窗口刷新完成");
 	}
+
 }

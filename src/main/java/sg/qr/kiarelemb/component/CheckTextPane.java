@@ -3,7 +3,6 @@ package sg.qr.kiarelemb.component;
 import swing.qr.kiarelemb.basic.QRLabel;
 import swing.qr.kiarelemb.basic.QRTextPane;
 import swing.qr.kiarelemb.data.QRMousePointIndexData;
-import swing.qr.kiarelemb.listener.QRDocumentListener;
 import swing.qr.kiarelemb.listener.QRFocusListener;
 import swing.qr.kiarelemb.listener.QRMouseMotionListener;
 import swing.qr.kiarelemb.theme.QRColorsAndFonts;

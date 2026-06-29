@@ -1,9 +1,9 @@
 package sg.qr.kiarelemb.component;
 
-import sg.qr.kiarelemb.data.Keys;
-import sg.qr.kiarelemb.menu.type.SettingsItem;
 import method.qr.kiarelemb.utils.QRArrayUtils;
 import method.qr.kiarelemb.utils.QRLoggerUtils;
+import sg.qr.kiarelemb.data.Keys;
+import sg.qr.kiarelemb.menu.type.SettingsItem;
 import swing.qr.kiarelemb.QRSwing;
 import swing.qr.kiarelemb.basic.QRComboBox;
 import swing.qr.kiarelemb.utils.QRFontComboBox;
@@ -19,54 +19,54 @@ import java.util.logging.Logger;
  **/
 public class ComboBox extends QRComboBox {
 
-    private static final Logger logger = QRLoggerUtils.getLogger(ComboBox.class);
+	private static final Logger logger = QRLoggerUtils.getLogger(ComboBox.class);
 
-    /**
-     * 在设置中使用的
-     *
-     * @param key   {@code int} 键值
-     * @param array 数组
-     */
-    public ComboBox(String key, String... array) {
-        super(array);
-        addItemChangeListener(e -> {
-            int index = QRArrayUtils.objectIndexOf(array, e.after());
-            SettingsItem.CHANGE_MAP.put(key, String.valueOf(index));
-        });
-        int index = Keys.intValue(key);
-        if (index >= array.length) {
-            setSelectedIndex(Integer.parseInt(Keys.DEFAULT_MAP.get(key)));
-        } else {
-            setSelectedIndex(index);
-        }
-    }
+	/**
+	 * 在设置中使用的
+	 *
+	 * @param key   {@code int} 键值
+	 * @param array 数组
+	 */
+	public ComboBox(String key, String... array) {
+		super(array);
+		addItemChangeListener(e -> {
+			int index = QRArrayUtils.objectIndexOf(array, e.after());
+			SettingsItem.CHANGE_MAP.put(key, String.valueOf(index));
+		});
+		int index = Keys.intValue(key);
+		if (index >= array.length) {
+			setSelectedIndex(Integer.parseInt(Keys.DEFAULT_MAP.get(key)));
+		} else {
+			setSelectedIndex(index);
+		}
+	}
 
-    public ComboBox(int i, String key, String... array) {
-        super(array);
-        addItemChangeListener(e -> {
-            int index = QRArrayUtils.objectIndexOf(array, e.after());
-            QRSwing.setGlobalSetting(key, String.valueOf(index));
-        });
-        int index = Keys.intValue(key);
-        if (index >= array.length) {
-            setSelectedIndex(Integer.parseInt(Keys.DEFAULT_MAP.get(key)));
-        } else {
-            setSelectedIndex(index);
-        }
-    }
+	public ComboBox(int i, String key, String... array) {
+		super(array);
+		addItemChangeListener(e -> {
+			int index = QRArrayUtils.objectIndexOf(array, e.after());
+			QRSwing.setGlobalSetting(key, String.valueOf(index));
+		});
+		int index = Keys.intValue(key);
+		if (index >= array.length) {
+			setSelectedIndex(Integer.parseInt(Keys.DEFAULT_MAP.get(key)));
+		} else {
+			setSelectedIndex(index);
+		}
+	}
 
 
-    public static class FontComboBox extends QRFontComboBox {
-        public FontComboBox(String key) {
-            super(false);
-            String value = Keys.strValue(key);
-            if (value != null) {
-                setText(value);
-            }
-            addItemChangeListener(e -> {
-                SettingsItem.CHANGE_MAP.put(key, e.after());
-                logger.log(Level.CONFIG, "已选择字体: %s", e.after());
-            });
-        }
-    }
+	public static class FontComboBox extends QRFontComboBox {
+		public FontComboBox(String key) {
+			super(false);
+			String value = Keys.strValue(key);
+			if (value != null) {
+				setText(value);
+			}
+			addItemChangeListener(e -> {
+				SettingsItem.CHANGE_MAP.put(key, e.after());
+				logger.log(Level.CONFIG, "已选择字体: %s", e.after());
+			});
+		}
+	}
 }

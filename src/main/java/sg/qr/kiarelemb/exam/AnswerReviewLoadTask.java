@@ -16,8 +16,11 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 final class AnswerReviewLoadTask implements QRTask<AnswerReviewLoadTask.Result> {
+	private static final Map<CacheKey, CachedAnalysis> ANALYSIS_CACHE = new ConcurrentHashMap<>();
+
 	private final GradingProject project;
 	private final SheetTemplate template;
 	private final SheetLayout answerSheet;
@@ -37,6 +40,15 @@ final class AnswerReviewLoadTask implements QRTask<AnswerReviewLoadTask.Result> 
 
 	@Override
 	public Result run(QRTaskContext context) throws Exception {
+		CacheKey key = CacheKey.from(answerFile, template);
+		GradingProject.ReviewedAnswer reviewedAnswer = project.reviewedAnswerFor(answerFile);
+		CachedAnalysis cached = ANALYSIS_CACHE.get(key);
+		Result cachedResult = cachedResult(cached, reviewedAnswer);
+		if (cachedResult != null) {
+			context.message("正在使用已缓存的答卷分析...");
+			return cachedResult;
+		}
+
 		context.message("正在读取答卷图片...");
 		BufferedImage image = ImageIO.read(answerFile);
 		context.checkCancelled();
@@ -59,7 +71,6 @@ final class AnswerReviewLoadTask implements QRTask<AnswerReviewLoadTask.Result> 
 				calibration.fillBlankRegionRect(),
 				template.defaultScoreRules(),
 				template.pageCount());
-		GradingProject.ReviewedAnswer reviewedAnswer = project.reviewedAnswerFor(answerFile);
 		GradingOutcome recognizedResult = null;
 		GradingProject.ReviewedAnswer resultReview = reviewedAnswer;
 		if (reviewedAnswer == null) {
@@ -74,8 +85,35 @@ final class AnswerReviewLoadTask implements QRTask<AnswerReviewLoadTask.Result> 
 				resultReview = new GradingProject.ReviewedAnswer(recognizedResult.examineeId(), reviewedAnswer.answers());
 			}
 		}
+		ANALYSIS_CACHE.put(key, new CachedAnalysis(image, currentTemplate, loadedAnswerSheet, recognizedResult));
 		return new Result(answerIndex, answerFile, image, currentTemplate, loadedAnswerSheet,
 				recognizedResult, resultReview, reviewedAnswer == null);
+	}
+
+	private Result cachedResult(CachedAnalysis cached, GradingProject.ReviewedAnswer reviewedAnswer) {
+		if (cached == null) {
+			return null;
+		}
+		GradingOutcome recognizedResult = null;
+		GradingProject.ReviewedAnswer resultReview = reviewedAnswer;
+		boolean newRecognition = false;
+		if (reviewedAnswer == null) {
+			if (cached.recognizedResult() == null) {
+				return null;
+			}
+			recognizedResult = cached.recognizedResult();
+			newRecognition = true;
+		} else if (!savedExamIdUsable(reviewedAnswer.examineeId())) {
+			if (cached.recognizedResult() == null) {
+				return null;
+			}
+			recognizedResult = cached.recognizedResult();
+			if (savedExamIdUsable(recognizedResult.examineeId())) {
+				resultReview = new GradingProject.ReviewedAnswer(recognizedResult.examineeId(), reviewedAnswer.answers());
+			}
+		}
+		return new Result(answerIndex, answerFile, cached.image(), cached.template(), cached.answerSheet(),
+				recognizedResult, resultReview, newRecognition);
 	}
 
 	private boolean savedExamIdUsable(String examineeId) {
@@ -115,5 +153,22 @@ final class AnswerReviewLoadTask implements QRTask<AnswerReviewLoadTask.Result> 
 	record Result(int answerIndex, File answerFile, BufferedImage image, SheetTemplate template,
 				  SheetLayout answerSheet, GradingOutcome recognizedResult,
 				  GradingProject.ReviewedAnswer reviewedAnswer, boolean newRecognition) {
+	}
+
+	private record CachedAnalysis(BufferedImage image, SheetTemplate template, SheetLayout answerSheet,
+	                              GradingOutcome recognizedResult) {
+	}
+
+	private record CacheKey(String answerPath, long answerLastModified, long answerLength,
+	                        String templatePath, long templateLastModified) {
+		private static CacheKey from(File answerFile, SheetTemplate template) {
+			File templateFile = template.pictureFile();
+			return new CacheKey(
+					answerFile.getAbsolutePath(),
+					answerFile.lastModified(),
+					answerFile.length(),
+					templateFile.getAbsolutePath(),
+					templateFile.lastModified());
+		}
 	}
 }

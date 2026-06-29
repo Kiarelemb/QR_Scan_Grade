@@ -1,21 +1,17 @@
 package sg.qr.kiarelemb.exam.processing;
 
+import method.qr.kiarelemb.utils.QRLoggerUtils;
 import org.bytedeco.opencv.opencv_core.Rect;
 import sg.qr.kiarelemb.exam.model.SheetLayout;
 import sg.qr.kiarelemb.exam.model.SheetQuestion;
-import sg.qr.kiarelemb.exam.model.SubjectiveAnswerRegion;
 import sg.qr.kiarelemb.exam.model.SheetTemplate;
+import sg.qr.kiarelemb.exam.model.SubjectiveAnswerRegion;
 
-import method.qr.kiarelemb.utils.QRLoggerUtils;
 import java.io.*;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.logging.Logger;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -136,8 +132,8 @@ public class SheetTemplateFileStore {
 				toSubjectiveRegions(data.subjectiveRegions),
 				imageFiles
 		);
-			logger.info("模板已加载: " + sgFile.getName() + " (版本 v" + data.version + ", " + t.answerSheet().getChoiceQuestions().size() + " 道选择题, " + t.subjectiveRegions().size() + " 个主观题区域, " + imageFiles.size() + " 页)");
-			return t;
+		logger.info("模板已加载: " + sgFile.getName() + " (版本 v" + data.version + ", " + t.answerSheet().getChoiceQuestions().size() + " 道选择题, " + t.subjectiveRegions().size() + " 个主观题区域, " + imageFiles.size() + " 页)");
+		return t;
 	}
 
 	public static File saveTemplate(SheetTemplate template, File targetFile) throws IOException {
@@ -205,57 +201,58 @@ public class SheetTemplateFileStore {
 	}
 
 	private record TemplateSnapshot(int version, String name, String imageEntryName, List<String> imageEntryNames,
-	                                SheetLayoutSnapshot answerSheet, RectSnapshot examRegionRect, RectSnapshot choiceRegionRect,
+	                                SheetLayoutSnapshot answerSheet, RectSnapshot examRegionRect,
+	                                RectSnapshot choiceRegionRect,
 	                                RectSnapshot fillBlankRegionRect, String defaultScoreRules, int pageCount,
 	                                List<SubjectiveRegionSnapshot> subjectiveRegions) implements Serializable {
-			@Serial
-			private static final long serialVersionUID = 1L;
+		@Serial
+		private static final long serialVersionUID = 1L;
 
-			private TemplateSnapshot(int version, String name, String imageEntryName, SheetLayoutSnapshot answerSheet,
-			                         RectSnapshot examRegionRect, RectSnapshot choiceRegionRect, RectSnapshot fillBlankRegionRect,
-			                         String defaultScoreRules,
-			                         int pageCount,
-			                         List<SubjectiveRegionSnapshot> subjectiveRegions) {
-				this(version, name, imageEntryName, imageEntryName == null ? List.of() : List.of(imageEntryName),
-						answerSheet, examRegionRect, choiceRegionRect, fillBlankRegionRect, defaultScoreRules,
-						pageCount, subjectiveRegions);
-			}
-
-			private TemplateSnapshot(int version, String name, String imageEntryName, List<String> imageEntryNames,
-			                         SheetLayoutSnapshot answerSheet,
-			                         RectSnapshot examRegionRect, RectSnapshot choiceRegionRect, RectSnapshot fillBlankRegionRect,
-			                         String defaultScoreRules,
-			                         int pageCount,
-			                         List<SubjectiveRegionSnapshot> subjectiveRegions) {
-				this.version = version;
-				this.name = name;
-				this.imageEntryName = imageEntryName;
-				this.imageEntryNames = imageEntryNames == null ? List.of() : List.copyOf(imageEntryNames);
-				this.answerSheet = answerSheet;
-				this.examRegionRect = examRegionRect;
-				this.choiceRegionRect = choiceRegionRect;
-				this.fillBlankRegionRect = fillBlankRegionRect;
-				this.defaultScoreRules = defaultScoreRules == null ? "" : defaultScoreRules;
-				this.pageCount = Math.max(1, pageCount);
-				this.subjectiveRegions = subjectiveRegions == null ? List.of() : List.copyOf(subjectiveRegions);
-			}
-
-			private static TemplateSnapshot from(SheetTemplate template, List<String> imageEntryNames) {
-				return new TemplateSnapshot(
-						FORMAT_VERSION,
-						template.name(),
-						imageEntryNames.isEmpty() ? null : imageEntryNames.get(0),
-						imageEntryNames,
-						SheetLayoutSnapshot.from(removeAnswers(template.answerSheet())),
-						RectSnapshot.fromNullable(template.examRegionRect()),
-						RectSnapshot.fromNullable(template.choiceRegionRect()),
-						RectSnapshot.fromNullable(template.fillBlankRegionRect()),
-						template.defaultScoreRules(),
-						template.pageCount(),
-						template.subjectiveRegions().stream().map(SubjectiveRegionSnapshot::from).toList()
-				);
-			}
+		private TemplateSnapshot(int version, String name, String imageEntryName, SheetLayoutSnapshot answerSheet,
+		                         RectSnapshot examRegionRect, RectSnapshot choiceRegionRect, RectSnapshot fillBlankRegionRect,
+		                         String defaultScoreRules,
+		                         int pageCount,
+		                         List<SubjectiveRegionSnapshot> subjectiveRegions) {
+			this(version, name, imageEntryName, imageEntryName == null ? List.of() : List.of(imageEntryName),
+					answerSheet, examRegionRect, choiceRegionRect, fillBlankRegionRect, defaultScoreRules,
+					pageCount, subjectiveRegions);
 		}
+
+		private TemplateSnapshot(int version, String name, String imageEntryName, List<String> imageEntryNames,
+		                         SheetLayoutSnapshot answerSheet,
+		                         RectSnapshot examRegionRect, RectSnapshot choiceRegionRect, RectSnapshot fillBlankRegionRect,
+		                         String defaultScoreRules,
+		                         int pageCount,
+		                         List<SubjectiveRegionSnapshot> subjectiveRegions) {
+			this.version = version;
+			this.name = name;
+			this.imageEntryName = imageEntryName;
+			this.imageEntryNames = imageEntryNames == null ? List.of() : List.copyOf(imageEntryNames);
+			this.answerSheet = answerSheet;
+			this.examRegionRect = examRegionRect;
+			this.choiceRegionRect = choiceRegionRect;
+			this.fillBlankRegionRect = fillBlankRegionRect;
+			this.defaultScoreRules = defaultScoreRules == null ? "" : defaultScoreRules;
+			this.pageCount = Math.max(1, pageCount);
+			this.subjectiveRegions = subjectiveRegions == null ? List.of() : List.copyOf(subjectiveRegions);
+		}
+
+		private static TemplateSnapshot from(SheetTemplate template, List<String> imageEntryNames) {
+			return new TemplateSnapshot(
+					FORMAT_VERSION,
+					template.name(),
+					imageEntryNames.isEmpty() ? null : imageEntryNames.get(0),
+					imageEntryNames,
+					SheetLayoutSnapshot.from(removeAnswers(template.answerSheet())),
+					RectSnapshot.fromNullable(template.examRegionRect()),
+					RectSnapshot.fromNullable(template.choiceRegionRect()),
+					RectSnapshot.fromNullable(template.fillBlankRegionRect()),
+					template.defaultScoreRules(),
+					template.pageCount(),
+					template.subjectiveRegions().stream().map(SubjectiveRegionSnapshot::from).toList()
+			);
+		}
+	}
 
 	private record SubjectiveRegionSnapshot(String name,
 	                                        int startQuestion,

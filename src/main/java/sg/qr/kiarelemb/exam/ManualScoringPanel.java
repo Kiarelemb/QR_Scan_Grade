@@ -7,11 +7,14 @@ import sg.qr.kiarelemb.exam.inter.ProjectStateSaver;
 import sg.qr.kiarelemb.exam.model.GradingProject;
 import sg.qr.kiarelemb.exam.model.SheetTemplate;
 import sg.qr.kiarelemb.exam.model.SubjectiveAnswerRegion;
+import sg.qr.kiarelemb.exam.processing.SheetCalibrator;
+import sg.qr.kiarelemb.exam.processing.SheetImagePreprocessor;
 import swing.qr.kiarelemb.basic.QRLabel;
 import swing.qr.kiarelemb.basic.QRPanel;
 import swing.qr.kiarelemb.basic.QRRoundButton;
 import swing.qr.kiarelemb.basic.QRTextField;
 import swing.qr.kiarelemb.inter.QRActionRegister;
+import swing.qr.kiarelemb.listener.QRKeyListener;
 import swing.qr.kiarelemb.task.QRTaskOptions;
 import swing.qr.kiarelemb.task.QRTaskRunner;
 import swing.qr.kiarelemb.task.QRTaskWorker;
@@ -25,6 +28,7 @@ import javax.swing.border.LineBorder;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
@@ -59,6 +63,10 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 
 	public static boolean hasManualQuestions(GradingProject project, SheetTemplate template) {
 		return !manualRegions(project, template).isEmpty();
+	}
+
+	public static int manualReviewItemCount(GradingProject project, SheetTemplate template) {
+		return buildItems(project, template).size();
 	}
 
 	public static boolean allManualScoresSaved(GradingProject project, SheetTemplate template) {
@@ -100,9 +108,11 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 
 		QRPanel buttons = new QRPanel(false, new FlowLayout(FlowLayout.RIGHT, 8, 0));
 		buttons.add(button("跳转", event -> jump()));
-		buttons.add(button("返回", event -> backToSubjectiveReview()));
-		buttons.add(button("上一题", event -> previous()));
-		buttons.add(button("下一题", event -> next(event)));
+		buttons.add(button("返回", event -> backToChoiceReview()));
+		buttons.add(button("上一张", event -> previous()));
+		QRRoundButton nextButton = button("下一张", this::next);
+		nextButton.setToolTipText("下一张：回车/Enter");
+		buttons.add(nextButton);
 		buttons.add(button("进入算分", event -> finish()));
 		panel.add(buttons, BorderLayout.EAST);
 
@@ -122,7 +132,12 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 		QRPanel inputPanel = new QRPanel(false, new FlowLayout(FlowLayout.LEFT, 8, 0));
 		inputPanel.add(new QRLabel("得分"));
 		scoreField.setPreferredSize(new Dimension(120, 32));
-		scoreField.addActionListener(event -> next(null));
+		scoreField.addKeyListenerAction(QRKeyListener.TYPE.TYPE, e -> {
+			if (e.getKeyCode() == KeyEvent.VK_ENTER) {
+				next(null);
+				e.consume();
+			}
+		});
 		inputPanel.add(scoreField);
 		panel.add(inputPanel, BorderLayout.CENTER);
 		return panel;
@@ -178,7 +193,7 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 			if (image == null) {
 				throw new IOException("不支持的图片格式或图片已损坏。");
 			}
-			BufferedImage crop = crop(image, item.region());
+			BufferedImage crop = crop(image, calibratedRegion(item));
 			return new ManualImageLoadResult(itemIndex, crop);
 		});
 	}
@@ -205,11 +220,11 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 		return maxScore == null || maxScore.compareTo(BigDecimal.ZERO) <= 0 ? "" : "，满分 " + Utils.formatScore(maxScore);
 	}
 
-	private BufferedImage crop(BufferedImage image, SubjectiveAnswerRegion region) {
-		if (region == null || region.region() == null) {
+	private BufferedImage crop(BufferedImage image, CroppedRegion region) {
+		if (region == null || region.rect() == null) {
 			return image;
 		}
-		Rect rect = scaleRegion(region.region(), image);
+		Rect rect = scaleRegion(region, image);
 		int padding = Math.max(12, Math.min(image.getWidth(), image.getHeight()) / 150);
 		int x = Math.max(0, Math.min(rect.x() - padding, image.getWidth() - 1));
 		int y = Math.max(0, Math.min(rect.y() - padding, image.getHeight() - 1));
@@ -218,9 +233,37 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 		return image.getSubimage(x, y, right - x, bottom - y);
 	}
 
-	private Rect scaleRegion(Rect rect, BufferedImage image) {
-		double sx = (double) image.getWidth() / Math.max(1, template.answerSheet().getImageWidth());
-		double sy = (double) image.getHeight() / Math.max(1, template.answerSheet().getImageHeight());
+	private CroppedRegion calibratedRegion(ManualReviewItem item) {
+		SubjectiveAnswerRegion modelRegion = item.region();
+		if (modelRegion == null) {
+			return null;
+		}
+		SheetTemplate pageTemplate = templateForRegion(modelRegion);
+		try {
+			SheetCalibrator.CalibrationResult calibration = SheetCalibrator.calibrate(
+					SheetImagePreprocessor.preprocess(item.imageFile()), pageTemplate, pageTemplate.answerSheet());
+			Rect rect = calibration.transform(modelRegion.region());
+			if (rect != null) {
+				return new CroppedRegion(rect, calibration.answerSheet().getImageWidth(), calibration.answerSheet().getImageHeight());
+			}
+		} catch (Exception ignored) {
+		}
+		return new CroppedRegion(modelRegion.region(), pageTemplate.answerSheet().getImageWidth(), pageTemplate.answerSheet().getImageHeight());
+	}
+
+	private SheetTemplate templateForRegion(SubjectiveAnswerRegion region) {
+		if (region == null || region.pageIndex() <= 0 || region.pageIndex() >= template.pictureFiles().size()) {
+			return template;
+		}
+		return new SheetTemplate(template.name(), template.pictureFiles().get(region.pageIndex()), template.answerSheet(),
+				template.examRegionRect(), template.choiceRegionRect(), template.fillBlankRegionRect(),
+				template.defaultScoreRules(), template.pageCount(), template.subjectiveRegions(), template.pictureFiles());
+	}
+
+	private Rect scaleRegion(CroppedRegion region, BufferedImage image) {
+		Rect rect = region.rect();
+		double sx = (double) image.getWidth() / Math.max(1, region.baseWidth());
+		double sy = (double) image.getHeight() / Math.max(1, region.baseHeight());
 		return new Rect((int) Math.round(rect.x() * sx),
 				(int) Math.round(rect.y() * sy),
 				Math.max(1, (int) Math.round(rect.width() * sx)),
@@ -323,13 +366,16 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 		}
 	}
 
-	private void backToSubjectiveReview() {
+	private void backToChoiceReview() {
 		saveCurrent();
-		if (SubjectiveOcrReviewPanel.hasSubjectiveQuestions(project, template)) {
-			MainWindow.INSTANCE.setCenterComponent(new SubjectiveOcrReviewPanel(project, template));
-		} else {
-			MainWindow.INSTANCE.showProjectReview(project);
+		if (!items.isEmpty() && project.answerFiles() != null) {
+			int answerIndex = project.answerFiles().indexOf(items.get(index).answerFile());
+			if (answerIndex >= 0) {
+				project.setIndex(answerIndex);
+				project.write();
+			}
 		}
+		MainWindow.INSTANCE.showProjectReview(project);
 	}
 
 	private void finish() {
@@ -446,6 +492,9 @@ public final class ManualScoringPanel extends QRPanel implements ProjectStateSav
 	}
 
 	private record ManualReviewItem(File answerFile, File imageFile, String examineeId, SubjectiveAnswerRegion region) {
+	}
+
+	private record CroppedRegion(Rect rect, int baseWidth, int baseHeight) {
 	}
 
 	private record ManualImageLoadResult(int itemIndex, BufferedImage image) {

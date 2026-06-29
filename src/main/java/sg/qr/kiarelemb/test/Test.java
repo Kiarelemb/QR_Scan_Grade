@@ -1,18 +1,18 @@
 package sg.qr.kiarelemb.test;
 
-import method.qr.kiarelemb.utils.QRCodePack;
 import method.qr.kiarelemb.utils.QRFileUtils;
 import method.qr.kiarelemb.utils.QRLoggerUtils;
 import method.qr.kiarelemb.utils.QRRandomUtils;
+import method.qr.kiarelemb.utils.QRStringUtils;
 import org.bytedeco.opencv.global.opencv_imgcodecs;
 import org.bytedeco.opencv.opencv_core.Mat;
-import sg.qr.kiarelemb.exam.template.detect.TemplateLayoutDetector;
-import sg.qr.kiarelemb.exam.model.SheetLayout;
 import sg.qr.kiarelemb.exam.model.GradingOutcome;
-import sg.qr.kiarelemb.exam.processing.ObjectiveAnswerGrader;
-import sg.qr.kiarelemb.exam.processing.BubbleMarkReader;
-import sg.qr.kiarelemb.exam.processing.SheetImagePreprocessor;
+import sg.qr.kiarelemb.exam.model.SheetLayout;
 import sg.qr.kiarelemb.exam.processing.AnswerRegionBuilder;
+import sg.qr.kiarelemb.exam.processing.BubbleMarkReader;
+import sg.qr.kiarelemb.exam.processing.ObjectiveAnswerGrader;
+import sg.qr.kiarelemb.exam.processing.SheetImagePreprocessor;
+import sg.qr.kiarelemb.exam.template.detect.TemplateLayoutDetector;
 
 import java.io.File;
 import java.time.LocalDateTime;
@@ -28,9 +28,7 @@ public class Test {
 
 
 	public static void main(String[] args) {
-		String str = QRCodePack.encrypt(INPUT_PATH, "kiarelemb");
-		System.out.println("str = " + str);
-		System.out.println("str = " + QRCodePack.decrypt(str, "kiarelemb"));
+		System.out.println(QRStringUtils.getKeyStroke("alt + left"));
 	}
 
 	public static void mainss(String[] args) {

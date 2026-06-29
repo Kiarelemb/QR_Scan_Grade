@@ -1,11 +1,6 @@
 package sg.qr.kiarelemb.exam.template.detect;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 final class ChoiceLayoutAnalyzer {
 	private ChoiceLayoutAnalyzer() {
@@ -56,7 +51,7 @@ final class ChoiceLayoutAnalyzer {
 		int groupStart = 0;
 		for (int i = 1; i <= sortedXCoords.size(); i++) {
 			if (i == sortedXCoords.size()
-				|| sortedXCoords.get(i) - sortedXCoords.get(i - 1) > columnBreakGap) {
+			    || sortedXCoords.get(i) - sortedXCoords.get(i - 1) > columnBreakGap) {
 				extractColumnsFromGroup(sortedXCoords, groupStart, i, optionGap, bubbleW, result);
 				groupStart = i;
 			}
@@ -65,7 +60,7 @@ final class ChoiceLayoutAnalyzer {
 	}
 
 	private static void extractColumnsFromGroup(List<Integer> coords, int start, int end,
-												int optionGap, int bubbleW, List<int[]> result) {
+	                                            int optionGap, int bubbleW, List<int[]> result) {
 		int size = end - start;
 		if (size < 3) {
 			return;

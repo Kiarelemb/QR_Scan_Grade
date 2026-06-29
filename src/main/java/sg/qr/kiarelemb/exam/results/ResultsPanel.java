@@ -5,7 +5,6 @@ import sg.qr.kiarelemb.data.Utils;
 import sg.qr.kiarelemb.exam.ManualScoringPanel;
 import sg.qr.kiarelemb.exam.model.GradingProject;
 import sg.qr.kiarelemb.exam.model.SheetTemplate;
-import sg.qr.kiarelemb.exam.model.SubjectiveAnswerRegion;
 import sg.qr.kiarelemb.exam.processing.SheetTemplateFileStore;
 import sg.qr.kiarelemb.exam.scoring.QuestionScorePolicy;
 import sg.qr.kiarelemb.exam.scoring.ScaledScoreConfigDialog;
@@ -195,14 +194,14 @@ public class ResultsPanel extends QRPanel {
 		int count = standardAnswerCount();
 		if (count == 0) {
 			return "# 每行格式：题型 题号范围 总分\n"
-				   + "# 尺度算分可选：废题 1 3 5-8；非废题 2 4\n"
-				   + "# 示例：选择 1-40 80\n";
+			       + "# 尺度算分可选：废题 1 3 5-8；非废题 2 4\n"
+			       + "# 示例：选择 1-40 80\n";
 		}
 		return "# 每行格式：题型 题号范围 总分\n"
-			   + "# 示例：单词 1-10 20\n"
-			   + "# 多个范围可用逗号隔开，如：用语 11-15,20 10\n\n"
-			   + "# 尺度算分可选：废题 1 3 5-8；非废题 2 4\n\n"
-			   + "选择 1-" + count + " " + count + "\n";
+		       + "# 示例：单词 1-10 20\n"
+		       + "# 多个范围可用逗号隔开，如：用语 11-15,20 10\n\n"
+		       + "# 尺度算分可选：废题 1 3 5-8；非废题 2 4\n\n"
+		       + "选择 1-" + count + " " + count + "\n";
 	}
 
 	private String templateDefaultRulesText() {
@@ -968,7 +967,7 @@ public class ResultsPanel extends QRPanel {
 	}
 
 	private record CalculateResult(ScoringPlan scorePlan, List<ScoreOutcome> scoreResults, List<String> exportRows,
-								   QuestionScorePolicy.ScaleScoreReport scaleReport, boolean scaleMode) {
+	                               QuestionScorePolicy.ScaleScoreReport scaleReport, boolean scaleMode) {
 	}
 
 	private record ManualDiscardDirectives(Set<Integer> discardQuestionIndices, Set<Integer> keepQuestionIndices) {

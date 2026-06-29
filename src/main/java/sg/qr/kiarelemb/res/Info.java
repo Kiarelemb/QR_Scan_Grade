@@ -1,11 +1,8 @@
 package sg.qr.kiarelemb.res;
 
-import method.qr.kiarelemb.utils.QRFileUtils;
 import method.qr.kiarelemb.utils.QRStringUtils;
 import method.qr.kiarelemb.utils.QRSystemUtils;
 
-import javax.swing.*;
-import java.io.File;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;

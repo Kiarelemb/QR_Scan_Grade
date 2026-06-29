@@ -4,7 +4,10 @@ import method.qr.kiarelemb.utils.QRLoggerUtils;
 import method.qr.kiarelemb.utils.QRStringUtils;
 import org.bytedeco.opencv.global.opencv_imgcodecs;
 import org.bytedeco.opencv.global.opencv_imgproc;
-import org.bytedeco.opencv.opencv_core.*;
+import org.bytedeco.opencv.opencv_core.Mat;
+import org.bytedeco.opencv.opencv_core.MatVector;
+import org.bytedeco.opencv.opencv_core.Rect;
+import org.bytedeco.opencv.opencv_core.Size;
 import sg.qr.kiarelemb.data.Utils;
 import sg.qr.kiarelemb.exam.geometry.SheetGeometryUtils;
 import sg.qr.kiarelemb.exam.model.SheetLayout;
@@ -12,7 +15,6 @@ import sg.qr.kiarelemb.exam.processing.AnswerRegionBuilder;
 
 import java.io.File;
 import java.util.*;
-import java.util.Arrays;
 import java.util.logging.Logger;
 
 /**
@@ -307,9 +309,9 @@ public class TemplateLayoutDetector {
 	}
 
 	private void refineExamLayoutFromRegion(List<Integer> validCols,
-											 Map<Integer, List<Integer>> colGroups,
-											 int bubbleW,
-											 int bubbleH) {
+	                                        Map<Integer, List<Integer>> colGroups,
+	                                        int bubbleW,
+	                                        int bubbleH) {
 		DetectedBox region = findLikelyExamRegionRect();
 		if (region == null || validCols == null || validCols.size() >= 3) {
 			return;
@@ -368,14 +370,14 @@ public class TemplateLayoutDetector {
 			if (area < 50000) continue;
 			double aspect = (double) r.w / Math.max(1, r.h);
 			boolean likelyExamRegion = r.x > detectedImageW * 0.45
-									   && r.y > detectedImageH * 0.12
-									   && r.y < detectedImageH * 0.45
-									   && r.w >= detectedImageW * 0.20
-									   && r.w <= detectedImageW * 0.50
-									   && r.h >= detectedImageH * 0.12
-									   && r.h <= detectedImageH * 0.35
-									   && aspect >= 0.8
-									   && aspect <= 1.6;
+			                           && r.y > detectedImageH * 0.12
+			                           && r.y < detectedImageH * 0.45
+			                           && r.w >= detectedImageW * 0.20
+			                           && r.w <= detectedImageW * 0.50
+			                           && r.h >= detectedImageH * 0.12
+			                           && r.h <= detectedImageH * 0.35
+			                           && aspect >= 0.8
+			                           && aspect <= 1.6;
 			if (likelyExamRegion && area > bestArea) {
 				best = r;
 				bestArea = area;
@@ -412,8 +414,8 @@ public class TemplateLayoutDetector {
 
 			double aspect = (double) r.w / Math.max(1, r.h);
 			boolean markBoxLike = r.w >= 35 && r.w <= 55
-								  && r.h >= 20 && r.h <= 35
-								  && aspect >= 1.25 && aspect <= 2.2;
+			                      && r.h >= 20 && r.h <= 35
+			                      && aspect >= 1.25 && aspect <= 2.2;
 			if (markBoxLike) {
 				preferredSizeMap.put(key, preferredSizeMap.getOrDefault(key, 0) + 1);
 			}
@@ -448,8 +450,8 @@ public class TemplateLayoutDetector {
 	 * 核心思路：在同一行内，连续的气泡间距<100px属于同一题组选项，间距>100px表示新的一列。
 	 */
 	private void inferChoiceColumns(Map<Integer, List<Integer>> rowGroups,
-									List<Integer> sortedRows,
-									int bubbleW, int bubbleH) {
+	                                List<Integer> sortedRows,
+	                                int bubbleW, int bubbleH) {
 		class RowInfo {
 			final int y;
 			final List<Integer> colStarts;
@@ -532,74 +534,74 @@ public class TemplateLayoutDetector {
 
 		for (int i = 0; i < bands.size(); i++) {
 			List<RowInfo> band = bands.get(i);
-				this.choiceRowStartYs[i] = band.get(0).y;
+			this.choiceRowStartYs[i] = band.get(0).y;
 
-				int mergeTol = Math.max(25, bubbleW + 5);
+			int mergeTol = Math.max(25, bubbleW + 5);
 
-				// 收集所有行的列X → 去重合并
-				List<Integer> bandCols = new ArrayList<>();
+			// 收集所有行的列X → 去重合并
+			List<Integer> bandCols = new ArrayList<>();
+			for (RowInfo row : band) {
+				for (int x : row.colStarts) {
+					boolean exists = false;
+					for (int oldX : bandCols) {
+						if (Math.abs(oldX - x) <= mergeTol) {
+							exists = true;
+							break;
+						}
+					}
+					if (!exists) bandCols.add(x);
+				}
+			}
+			Collections.sort(bandCols);
+
+			// 统计每列出现在几行中，舍弃仅出现在 ≤1 行的噪声列
+			List<Integer> validColXs = new ArrayList<>();
+			List<Integer> validCounts = new ArrayList<>();
+			List<Integer> validOptionCounts = new ArrayList<>();
+			for (int colX : bandCols) {
+				int count = 0;
+				List<Integer> columnOptionCounts = new ArrayList<>();
 				for (RowInfo row : band) {
-					for (int x : row.colStarts) {
-						boolean exists = false;
-						for (int oldX : bandCols) {
-							if (Math.abs(oldX - x) <= mergeTol) {
-								exists = true;
-								break;
+					for (int j = 0; j < row.colStarts.size(); j++) {
+						int x = row.colStarts.get(j);
+						if (Math.abs(x - colX) <= mergeTol) {
+							count++;
+							if (j < row.optionCounts.size()) {
+								columnOptionCounts.add(row.optionCounts.get(j));
 							}
-						}
-						if (!exists) bandCols.add(x);
-					}
-				}
-				Collections.sort(bandCols);
-
-				// 统计每列出现在几行中，舍弃仅出现在 ≤1 行的噪声列
-				List<Integer> validColXs = new ArrayList<>();
-				List<Integer> validCounts = new ArrayList<>();
-				List<Integer> validOptionCounts = new ArrayList<>();
-				for (int colX : bandCols) {
-					int count = 0;
-					List<Integer> columnOptionCounts = new ArrayList<>();
-					for (RowInfo row : band) {
-						for (int j = 0; j < row.colStarts.size(); j++) {
-							int x = row.colStarts.get(j);
-							if (Math.abs(x - colX) <= mergeTol) {
-								count++;
-								if (j < row.optionCounts.size()) {
-									columnOptionCounts.add(row.optionCounts.get(j));
-								}
-								break;
-							}
+							break;
 						}
 					}
-					if (count >= 2) {
-						validColXs.add(colX);
-						validCounts.add(count);
-						validOptionCounts.add(columnOptionCounts.isEmpty()
-								? choiceOptionCount
-								: SheetGeometryUtils.dominantCount(columnOptionCounts));
-					}
 				}
-				if (!referenceColXs.isEmpty() && validColXs.size() > referenceColXs.size()) {
-					List<Integer> keepIndexes = SheetGeometryUtils.closestColumnIndexes(validColXs, referenceColXs);
-					List<Integer> filteredColXs = new ArrayList<>();
-					List<Integer> filteredCounts = new ArrayList<>();
-					List<Integer> filteredOptionCounts = new ArrayList<>();
-					for (int index : keepIndexes) {
-						filteredColXs.add(validColXs.get(index));
-						filteredCounts.add(validCounts.get(index));
-						filteredOptionCounts.add(validOptionCounts.get(index));
-					}
-					validColXs = filteredColXs;
-					validCounts = filteredCounts;
-					validOptionCounts = filteredOptionCounts;
+				if (count >= 2) {
+					validColXs.add(colX);
+					validCounts.add(count);
+					validOptionCounts.add(columnOptionCounts.isEmpty()
+							? choiceOptionCount
+							: SheetGeometryUtils.dominantCount(columnOptionCounts));
 				}
-				if (referenceColXs.isEmpty() && validColXs.size() >= 2) {
-					referenceColXs = new ArrayList<>(validColXs);
+			}
+			if (!referenceColXs.isEmpty() && validColXs.size() > referenceColXs.size()) {
+				List<Integer> keepIndexes = SheetGeometryUtils.closestColumnIndexes(validColXs, referenceColXs);
+				List<Integer> filteredColXs = new ArrayList<>();
+				List<Integer> filteredCounts = new ArrayList<>();
+				List<Integer> filteredOptionCounts = new ArrayList<>();
+				for (int index : keepIndexes) {
+					filteredColXs.add(validColXs.get(index));
+					filteredCounts.add(validCounts.get(index));
+					filteredOptionCounts.add(validOptionCounts.get(index));
 				}
-				this.choiceColsPerRow[i] = validColXs.size();
-				flatXs.addAll(validColXs);
-				flatCounts.addAll(validCounts);
-				flatOptionCounts.addAll(validOptionCounts);
+				validColXs = filteredColXs;
+				validCounts = filteredCounts;
+				validOptionCounts = filteredOptionCounts;
+			}
+			if (referenceColXs.isEmpty() && validColXs.size() >= 2) {
+				referenceColXs = new ArrayList<>(validColXs);
+			}
+			this.choiceColsPerRow[i] = validColXs.size();
+			flatXs.addAll(validColXs);
+			flatCounts.addAll(validCounts);
+			flatOptionCounts.addAll(validOptionCounts);
 		}
 
 		this.choiceColStartXs = flatXs.stream().mapToInt(Integer::intValue).toArray();
@@ -619,13 +621,17 @@ public class TemplateLayoutDetector {
 				for (int c = 0; c < choiceColsPerRow[row] && idx < choiceColStartXs.length; c++, idx++) {
 					boolean match = false;
 					for (int ref : firstCols) {
-						if (Math.abs(choiceColStartXs[idx] - ref) <= refTol) { match = true; break; }
+						if (Math.abs(choiceColStartXs[idx] - ref) <= refTol) {
+							match = true;
+							break;
+						}
 					}
 					if (match) {
 						newStarts[n] = choiceColStartXs[idx];
 						newCounts[n] = choiceQuestionsPerCol[idx];
 						newOptionCounts[n] = idx < choiceOptionCountsPerCol.length ? choiceOptionCountsPerCol[idx] : choiceOptionCount;
-						n++; kept++;
+						n++;
+						kept++;
 					}
 				}
 				choiceColsPerRow[row] = kept;
@@ -746,9 +752,9 @@ public class TemplateLayoutDetector {
 			if (aspect < 0.35 || aspect > 3.2) continue;
 
 			boolean nearEdge = x < imgW * 0.08
-							   || x + w > imgW * 0.92
-							   || y < imgH * 0.04
-							   || y + h > imgH * 0.96;
+			                   || x + w > imgW * 0.92
+			                   || y < imgH * 0.04
+			                   || y + h > imgH * 0.96;
 			if (nearEdge) continue;
 
 			Mat approx = new Mat();
@@ -800,7 +806,7 @@ public class TemplateLayoutDetector {
 
 				// 检查是否包含起始点（容差30px）
 				boolean containsStart = r.x <= examStartX + 30 && r.x + r.w >= examStartX - 30
-										&& r.y <= examStartY + 30 && r.y + r.h >= examStartY - 30;
+				                        && r.y <= examStartY + 30 && r.y + r.h >= examStartY - 30;
 
 				// 检查是否覆盖大部分区域（至少50%）
 				int overlapX = Math.min(r.x + r.w, examEndX) - Math.max(r.x, examStartX);
@@ -818,7 +824,7 @@ public class TemplateLayoutDetector {
 			if (matchedExamRect != null) {
 				examRegionRect = new DetectedBox(matchedExamRect.x, matchedExamRect.y, matchedExamRect.w, matchedExamRect.h);
 				logger.info("✅ 准考证号区域: x=" + examRegionRect.x() + ", y=" + examRegionRect.y()
-							+ ", w=" + examRegionRect.w() + ", h=" + examRegionRect.h());
+				            + ", w=" + examRegionRect.w() + ", h=" + examRegionRect.h());
 			} else {
 				logger.warning("⚠️ 未找到包含准考证起始坐标的大矩形");
 
@@ -831,8 +837,8 @@ public class TemplateLayoutDetector {
 
 		// ==================== 2. 选择题区域 ====================
 		if (choiceRows > 0
-			&& choiceRowStartYs != null && choiceRowStartYs.length > 0
-			&& choiceColStartXs != null && choiceColStartXs.length > 0) {
+		    && choiceRowStartYs != null && choiceRowStartYs.length > 0
+		    && choiceColStartXs != null && choiceColStartXs.length > 0) {
 
 			int firstChoiceX = choiceColStartXs[0];
 			int firstChoiceY = choiceRowStartYs[0];
@@ -842,10 +848,10 @@ public class TemplateLayoutDetector {
 
 			for (DetectedBox r : largeRects) {
 				if (examRegionRect != null
-					&& r.x == examRegionRect.x()
-					&& r.y == examRegionRect.y()
-					&& r.w == examRegionRect.w()
-					&& r.h == examRegionRect.h()) {
+				    && r.x == examRegionRect.x()
+				    && r.y == examRegionRect.y()
+				    && r.w == examRegionRect.w()
+				    && r.h == examRegionRect.h()) {
 					continue;
 				}
 
@@ -871,9 +877,9 @@ public class TemplateLayoutDetector {
 						matchedChoiceRect.h
 				);
 				logger.info("✅ 选择题区域: x=" + choiceRegionRect.x()
-							+ ", y=" + choiceRegionRect.y()
-							+ ", w=" + choiceRegionRect.width()
-							+ ", h=" + choiceRegionRect.height());
+				            + ", y=" + choiceRegionRect.y()
+				            + ", w=" + choiceRegionRect.width()
+				            + ", h=" + choiceRegionRect.height());
 				DetectedBox matchedFillRect = TemplateLayoutDetectorUtils.findFillBlankRegion(largeRects, matchedChoiceRect);
 				if (matchedFillRect != null) {
 					fillStartX = matchedFillRect.x;
@@ -905,11 +911,11 @@ public class TemplateLayoutDetector {
 
 	private void trimAndNormalizeChoiceLayout(Rect validChoiceRegion) {
 		if (validChoiceRegion == null
-			|| choiceRows <= 0
-			|| choiceColsPerRow == null
-			|| choiceRowStartYs == null
-			|| choiceColStartXs == null
-			|| choiceQuestionsPerCol == null) {
+		    || choiceRows <= 0
+		    || choiceColsPerRow == null
+		    || choiceRowStartYs == null
+		    || choiceColStartXs == null
+		    || choiceQuestionsPerCol == null) {
 			return;
 		}
 
@@ -933,9 +939,9 @@ public class TemplateLayoutDetector {
 				int count = choiceQuestionsPerCol[sourceIndex];
 				sourceIndex++;
 				if (count <= 0 || colX < validChoiceRegion.x() - choiceBubbleW
-					|| colX > validChoiceRegion.x() + validChoiceRegion.width()
-					|| rowY < validChoiceRegion.y() - choiceBubbleH
-					|| rowY >= regionBottom) {
+				    || colX > validChoiceRegion.x() + validChoiceRegion.width()
+				    || rowY < validChoiceRegion.y() - choiceBubbleH
+				    || rowY >= regionBottom) {
 					continue;
 				}
 				int visibleCount = 0;

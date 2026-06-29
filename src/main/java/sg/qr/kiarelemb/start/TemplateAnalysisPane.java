@@ -4,11 +4,7 @@ import org.bytedeco.opencv.opencv_core.Rect;
 import sg.qr.kiarelemb.component.AnswerSheetPreviewPanel;
 import sg.qr.kiarelemb.exam.model.SheetLayout;
 import sg.qr.kiarelemb.exam.model.SheetTemplate;
-import swing.qr.kiarelemb.basic.QRButton;
-import swing.qr.kiarelemb.basic.QRLabel;
-import swing.qr.kiarelemb.basic.QRPanel;
-import swing.qr.kiarelemb.basic.QRSplitPane;
-import swing.qr.kiarelemb.basic.QRTextPane;
+import swing.qr.kiarelemb.basic.*;
 import swing.qr.kiarelemb.theme.QRColorsAndFonts;
 
 import javax.imageio.ImageIO;
@@ -167,7 +163,7 @@ public class TemplateAnalysisPane extends QRSplitPane {
 			return;
 		}
 		resultPane.println(label + "：X=" + rect.x() + "，Y=" + rect.y()
-						   + "，宽：" + rect.width() + "，高：" + rect.height());
+		                   + "，宽：" + rect.width() + "，高：" + rect.height());
 	}
 
 	static String buildShortSummary(SheetLayout sheet) {

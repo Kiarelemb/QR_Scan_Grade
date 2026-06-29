@@ -142,7 +142,7 @@ public class ExistingTemplatePanel extends QRPanel {
 				failures.add(file.getName() + "：" + ex.getMessage());
 			}
 			if (context != null) {
-				context.progress(i + 1, Math.max(1, total));
+				context.progress(i + 1, total);
 			}
 		}
 		return new TemplateLoadResult(List.copyOf(templates), List.copyOf(failures));

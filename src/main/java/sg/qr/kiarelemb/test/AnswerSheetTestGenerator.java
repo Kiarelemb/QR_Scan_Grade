@@ -8,13 +8,13 @@ import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.graphics.image.JPEGFactory;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.bytedeco.opencv.opencv_core.Rect;
-import sg.qr.kiarelemb.exam.template.detect.TemplateLayoutDetector;
 import sg.qr.kiarelemb.exam.model.SheetLayout;
 import sg.qr.kiarelemb.exam.model.SheetQuestion;
 import sg.qr.kiarelemb.exam.model.SheetTemplate;
 import sg.qr.kiarelemb.exam.model.SubjectiveAnswerRegion;
 import sg.qr.kiarelemb.exam.processing.DocumentPageLoader;
 import sg.qr.kiarelemb.exam.processing.SheetTemplateFileStore;
+import sg.qr.kiarelemb.exam.template.detect.TemplateLayoutDetector;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
@@ -140,8 +140,8 @@ public final class AnswerSheetTestGenerator {
 
 		GeneratedAnswers answers = GeneratedAnswers.randomFor(template);
 		System.out.println("测试答案: 选择题=" + String.join("", answers.choiceAnswers())
-				+ ", 填空题=" + String.join(" / ", answers.fillBlankAnswers())
-				+ ", 作文=" + answers.compositionTitle());
+		                   + ", 填空题=" + String.join(" / ", answers.fillBlankAnswers())
+		                   + ", 作文=" + answers.compositionTitle());
 		try (PDDocument document = new PDDocument()) {
 			int total = endExamId - startExamId + 1;
 			for (int examId = startExamId; examId <= endExamId; examId++) {
@@ -190,17 +190,17 @@ public final class AnswerSheetTestGenerator {
 		}
 		GeneratedAnswers answers = GeneratedAnswers.randomFor(template);
 		System.out.println("测试答案: 选择题=" + String.join("", answers.choiceAnswers())
-				+ ", 填空题=" + String.join(" / ", answers.fillBlankAnswers())
-				+ ", 作文=" + answers.compositionTitle());
+		                   + ", 填空题=" + String.join(" / ", answers.fillBlankAnswers())
+		                   + ", 作文=" + answers.compositionTitle());
 		for (int examId = startExamId; examId <= endExamId; examId++) {
 			List<BufferedImage> pages = copyPages(templatePages);
 			fillAnswerSheet(pages, template, String.valueOf(examId), answers);
 			for (int pageIndex = 0; pageIndex < pages.size(); pageIndex++) {
 				String name = filePrefix
-						+ String.format(Locale.ROOT, "%03d", examId - startExamId + 1)
-						+ "_" + examId
-						+ "_p" + String.format(Locale.ROOT, "%03d", pageIndex + 1)
-						+ ".png";
+				              + String.format(Locale.ROOT, "%03d", examId - startExamId + 1)
+				              + "_" + examId
+				              + "_p" + String.format(Locale.ROOT, "%03d", pageIndex + 1)
+				              + ".png";
 				File outputFile = new File(outputDirectory, name);
 				ImageIO.write(pages.get(pageIndex), "png", outputFile);
 				System.out.println(outputFile.getName() + " generated");
@@ -296,8 +296,8 @@ public final class AnswerSheetTestGenerator {
 
 	private static boolean isFixedFinalExamTemplate(SheetLayout answerSheet) {
 		return answerSheet.getImageWidth() == IMAGE_WIDTH
-				&& answerSheet.getImageHeight() == IMAGE_HEIGHT
-				&& answerSheet.getChoiceQuestions().size() == 50;
+		       && answerSheet.getImageHeight() == IMAGE_HEIGHT
+		       && answerSheet.getChoiceQuestions().size() == 50;
 	}
 
 	private static void drawFixedFinalExamChoices(Graphics2D graphics, List<String> answers) {
